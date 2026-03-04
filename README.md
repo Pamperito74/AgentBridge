@@ -50,6 +50,10 @@ ab register "codex-1" --role "fixing auth"
 ab send "Found the bug in auth.py line 42" --sender "codex-1"
 ab read
 ab agents
+ab actors
+ab emit "build started" --actor-id ci --actor-type service --event-type task.update
+ab events --thread general
+ab backup
 ```
 
 ### HTTP API (for any tool that can make requests)
@@ -94,11 +98,18 @@ Session 1:
 ```
 ab register <name> [--role <role>]
 ab send <content> [--to <recipient>] [--thread <thread>] [--sender <name>]
-ab read [--thread <thread>] [--sender <sender>] [--limit <n>]
+ab read [--thread <thread>] [--sender <sender>] [--before <iso-ts>] [--limit <n>]
 ab agents
+ab actors
+ab emit <content> --actor-id <id> [--actor-type <type>] [--target-id <id>] [--event-type <type>]
+ab events [--thread <thread>] [--actor-id <id>] [--event-type <type>] [--limit <n>]
+ab schemas
+ab register-schema <event_type> <schema.json>
 ab threads
 ab create-thread <name> [--creator <name>]
-ab serve [--host <host>] [--port <port>]
+ab serve [--host <host>] [--port <port>] [--public]
+ab backup [--output <path>]
+ab doctor
 ```
 
 ## HTTP API Reference
@@ -107,13 +118,41 @@ ab serve [--host <host>] [--port <port>]
 |--------|----------|-------------|
 | POST | `/agents` | Register agent `{name, role}` |
 | GET | `/agents` | List connected agents |
+| GET | `/actors` | Generic actor view (agent alias) |
 | POST | `/messages` | Send message `{sender, content, recipient?, thread?}` |
-| GET | `/messages?thread=&sender=&since=&limit=` | Read messages |
+| GET | `/messages?thread=&sender=&since=&before=&limit=` | Read messages |
+| POST | `/bus/events` | Emit generic event envelope |
+| GET | `/bus/events?thread=&actor_id=&target_id=&event_type=&since=&before=&limit=` | Read generic events |
+| GET | `/bus/schemas` | List runtime event schemas |
+| POST | `/bus/schemas` | Register/update runtime schema `{event_type, schema}` |
 | POST | `/threads` | Create thread `{name, created_by}` |
 | GET | `/threads` | List threads |
 | GET | `/health` | Health check |
 
 Default port: `7890`
+
+Server bind default: `127.0.0.1` (local only). Use `ab serve --public` to bind `0.0.0.0`.
+
+## Security
+
+Set `AGENTBRIDGE_TOKEN` to require auth on all HTTP endpoints except `/health`.
+
+```bash
+export AGENTBRIDGE_TOKEN='replace-with-long-random-token'
+ab serve
+```
+
+CLI automatically sends this token if set. For raw HTTP:
+
+```bash
+curl -H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN" localhost:7890/agents
+```
+
+Dashboard with token:
+
+```text
+http://localhost:7890/ui?token=YOUR_TOKEN
+```
 
 ## Architecture
 
@@ -123,6 +162,66 @@ Default port: `7890`
 - **SQLite** — Persistent storage at `~/.agentbridge/messages.db`
 
 Messages auto-expire after 24h. Agents auto-expire after 1h of inactivity.
+
+Logs are written to `~/.agentbridge/logs/agentbridge.log` with rotation.
+
+## Load Test
+
+```bash
+python scripts/load_test.py --workers 8 --messages-per-worker 100
+```
+
+## Event Schema Registry
+
+Event types can be validated at runtime without code changes.
+
+Built-in schemas include:
+- `note.text`
+- `task.update` (requires `metadata.job_id`)
+- `task.*` wildcard (requires `metadata.job_id`)
+- `artifact.created`
+- `run.result`
+
+Schema matching precedence:
+1. Exact event type (e.g. `task.reviewed`)
+2. Most specific wildcard prefix (e.g. `task.review.*`)
+3. Global wildcard (`*`)
+
+Schemas can inherit from others via `extends`:
+
+```json
+{
+  "extends": "task.*",
+  "required": ["reviewer"],
+  "properties": {
+    "reviewer": {"type": "string"}
+  }
+}
+```
+
+Register custom schema:
+
+```bash
+ab register-schema build.finished ./build_finished.schema.json
+ab schemas
+```
+
+Or via HTTP:
+
+```bash
+curl -X POST localhost:7890/bus/schemas \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "event_type": "build.finished",
+    "schema": {
+      "required": ["build_id", "ok"],
+      "properties": {
+        "build_id": {"type": "string"},
+        "ok": {"type": "boolean"}
+      }
+    }
+  }'
+```
 
 ## Running Tests
 

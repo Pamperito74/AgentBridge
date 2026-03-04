@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentBridge Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #12121a;
+    --bg-input: #1a1a25;
+    --border: #2a2a3a;
+    --fg: #e4e4ef;
+    --fg-dim: #8888a0;
+    --accent: #7c5cfc;
+    --accent-dim: #5a3fd4;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: 56px 1fr;
+  }
+  /* Header */
+  header {
+    grid-column: 1 / -1;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  header .status { font-size: 12px; color: var(--fg-dim); margin-left: auto; }
+  /* Sidebar */
+  aside {
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+  aside h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-dim);
+    padding: 0 16px;
+    margin-bottom: 8px;
+  }
+  .agent-item, .thread-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .agent-item:hover, .thread-item:hover { background: var(--bg-input); }
+  .thread-item.active { background: var(--accent-dim); color: #fff; }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .status-dot.online { background: var(--green); }
+  .status-dot.busy { background: var(--yellow); }
+  .status-dot.idle { background: var(--fg-dim); }
+  .agent-meta { font-size: 11px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agent-info { overflow: hidden; }
+  .agent-name { font-weight: 500; }
+  /* Main */
+  main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .msg {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 80%;
+    word-wrap: break-word;
+  }
+  .msg .meta {
+    font-size: 11px;
+    color: var(--fg-dim);
+    margin-bottom: 2px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .msg .sender { font-weight: 600; color: var(--accent); }
+  .msg .recipient { color: var(--blue); }
+  .msg .type-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .type-badge.request { background: var(--blue); color: #000; }
+  .type-badge.status { background: var(--yellow); color: #000; }
+  .type-badge.alert { background: var(--red); color: #fff; }
+  .msg .artifacts { margin-top: 4px; }
+  .msg .artifact {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    background: var(--bg-input);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+    color: var(--fg-dim);
+  }
+  .msg .mention { color: var(--accent); font-weight: 500; }
+  .system-msg {
+    text-align: center;
+    color: var(--fg-dim);
+    font-size: 11px;
+    padding: 4px;
+    font-style: italic;
+  }
+  /* Compose */
+  .compose {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    background: var(--bg-card);
+  }
+  .compose select, .compose input, .compose button {
+    font-family: inherit;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-input);
+    color: var(--fg);
+    outline: none;
+  }
+  .compose select { padding: 8px; width: 130px; }
+  .compose input {
+    flex: 1;
+    padding: 8px 12px;
+  }
+  .compose input:focus { border-color: var(--accent); }
+  .compose button {
+    padding: 8px 16px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .compose button:hover { background: var(--accent-dim); }
+  .compose .row { display: flex; gap: 8px; width: 100%; }
+  .compose-wrap { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  /* Empty state */
+  .empty { color: var(--fg-dim); font-size: 13px; text-align: center; margin-top: 40px; }
+  /* @mention autocomplete */
+  .mention-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 10;
+    display: none;
+    min-width: 200px;
+  }
+  .mention-popup.visible { display: block; }
+  .mention-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+  }
+  .mention-option:hover, .mention-option.active {
+    background: var(--accent-dim);
+    color: #fff;
+  }
+  .mention-option .mo-name { font-weight: 500; }
+  .mention-option .mo-role { font-size: 11px; color: var(--fg-dim); }
+  .mention-option:hover .mo-role, .mention-option.active .mo-role { color: rgba(255,255,255,0.7); }
+  .input-wrapper { position: relative; flex: 1; }
+  .input-wrapper input { width: 100%; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="dot"></div>
+    <h1>AgentBridge</h1>
+    <span class="status" id="conn-status">Connecting...</span>
+  </header>
+
+  <aside>
+    <h2>Agents</h2>
+    <div id="agent-list"></div>
+    <h2 style="margin-top: 20px;">Threads</h2>
+    <div id="thread-list"></div>
+  </aside>
+
+  <main>
+    <div class="messages" id="messages">
+      <div class="empty">No messages yet. Agents will appear here when they communicate.</div>
+    </div>
+    <div class="compose">
+      <div class="compose-wrap">
+        <div class="row">
+          <input type="text" id="sender-input" placeholder="Your name" value="dashboard" style="width: 130px;">
+          <select id="recipient-select"><option value="">Broadcast</option></select>
+          <select id="thread-select"><option value="general">general</option></select>
+          <select id="type-select">
+            <option value="chat">chat</option>
+            <option value="request">request</option>
+            <option value="status">status</option>
+            <option value="alert">alert</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="input-wrapper">
+            <input type="text" id="msg-input" placeholder="Type a message... (@ to mention)" autocomplete="off">
+            <div class="mention-popup" id="mention-popup"></div>
+          </div>
+          <button id="send-btn">Send</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+const API = window.location.origin;
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+let currentThread = null; // null = all threads
+let agents = [];
+let threads = [];
+
+// --- Fetch helpers ---
+async function fetchJSON(path, opts) {
+  const options = opts ? {...opts} : {};
+  const headers = options.headers ? {...options.headers} : {};
+  if (TOKEN) headers['X-AgentBridge-Token'] = TOKEN;
+  if (Object.keys(headers).length) options.headers = headers;
+  const r = await fetch(API + path, options);
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`HTTP ${r.status}: ${text || r.statusText}`);
+  }
+  return r.json();
+}
+
+// --- Render ---
+function renderAgents() {
+  const el = document.getElementById('agent-list');
+  if (!agents.length) { el.innerHTML = '<div class="empty" style="margin:8px 16px">No agents</div>'; return; }
+  el.innerHTML = agents.map(a => `
+    <div class="agent-item">
+      <div class="status-dot ${a.status || 'online'}"></div>
+      <div class="agent-info">
+        <div class="agent-name">${esc(a.name)}</div>
+        <div class="agent-meta">${esc(a.role || '')} ${a.working_on ? '— ' + esc(a.working_on) : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  // Update recipient dropdown
+  const sel = document.getElementById('recipient-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Broadcast</option>' + agents.map(a =>
+    `<option value="${esc(a.name)}">${esc(a.name)}</option>`
+  ).join('');
+  sel.value = cur;
+}
+
+function renderThreads() {
+  const el = document.getElementById('thread-list');
+  const all = [{name: '(all)', _all: true}, {name: 'general'}, ...threads.filter(t => t.name !== 'general')];
+  el.innerHTML = all.map(t => `
+    <div class="thread-item ${t._all ? (!currentThread ? 'active' : '') : (currentThread === t.name ? 'active' : '')}"
+         data-thread="${t._all ? '' : t.name}">
+      #${esc(t.name)}
+    </div>
+  `).join('');
+  el.querySelectorAll('.thread-item').forEach(item => {
+    item.onclick = () => {
+      currentThread = item.dataset.thread || null;
+      renderThreads();
+      loadMessages();
+    };
+  });
+  // Update thread dropdown
+  const sel = document.getElementById('thread-select');
+  const cur = sel.value;
+  const names = ['general', ...threads.filter(t => t.name !== 'general').map(t => t.name)];
+  sel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = cur || 'general';
+}
+
+function renderMessage(m) {
+  const typeBadge = m.msg_type && m.msg_type !== 'chat'
+    ? `<span class="type-badge ${m.msg_type}">${m.msg_type}</span>` : '';
+  const to = m.recipient ? `<span class="recipient">→ ${esc(m.recipient)}</span>` : '';
+  const thread = m.thread !== 'general' ? `<span>[${esc(m.thread)}]</span>` : '';
+
+  // Highlight @mentions in content
+  let content = esc(m.content).replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
+
+  let artifactHTML = '';
+  if (m.artifacts && m.artifacts.length) {
+    artifactHTML = '<div class="artifacts">' + m.artifacts.map(a =>
+      `<span class="artifact">${a.type === 'file' ? '📄' : a.type === 'code' ? '💻' : '🔗'} ${esc(a.content.substring(0, 60))}</span>`
+    ).join('') + '</div>';
+  }
+
+  const ts = new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  return `<div class="msg">
+    <div class="meta"><span class="sender">${esc(m.sender)}</span>${to} ${thread} ${typeBadge} <span>${ts}</span></div>
+    <div>${content}</div>
+    ${artifactHTML}
+  </div>`;
+}
+
+function addSystemMessage(text) {
+  const el = document.getElementById('messages');
+  el.innerHTML += `<div class="system-msg">${esc(text)}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// --- Load initial data ---
+async function loadAgents() {
+  agents = await fetchJSON('/agents');
+  renderAgents();
+}
+
+async function loadThreads() {
+  threads = await fetchJSON('/threads');
+  renderThreads();
+}
+
+async function loadMessages() {
+  const params = new URLSearchParams({limit: '100'});
+  if (currentThread) params.set('thread', currentThread);
+  const msgs = await fetchJSON('/messages?' + params);
+  const el = document.getElementById('messages');
+  if (!msgs.length) {
+    el.innerHTML = '<div class="empty">No messages yet.</div>';
+    return;
+  }
+  el.innerHTML = msgs.map(renderMessage).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+// --- @Mention autocomplete ---
+const mentionPopup = document.getElementById('mention-popup');
+const msgInput = document.getElementById('msg-input');
+let mentionActiveIndex = 0;
+let mentionFiltered = [];
+let mentionStart = -1; // cursor position where @ was typed
+
+function getMentionQuery() {
+  const val = msgInput.value;
+  const cursor = msgInput.selectionStart;
+  // Walk back from cursor to find @
+  for (let i = cursor - 1; i >= 0; i--) {
+    if (val[i] === '@') {
+      // Make sure @ is at start or preceded by space
+      if (i === 0 || val[i - 1] === ' ') {
+        mentionStart = i;
+        return val.substring(i + 1, cursor).toLowerCase();
+      }
+      break;
+    }
+    if (val[i] === ' ') break;
+  }
+  mentionStart = -1;
+  return null;
+}
+
+function showMentionPopup(query) {
+  // Build options: @all + matching agents
+  const allOption = { name: 'all', role: 'Broadcast to everyone' };
+  const pool = [allOption, ...agents];
+  mentionFiltered = pool.filter(a => a.name.toLowerCase().includes(query));
+  if (!mentionFiltered.length) { hideMentionPopup(); return; }
+  mentionActiveIndex = 0;
+  mentionPopup.innerHTML = mentionFiltered.map((a, i) =>
+    `<div class="mention-option ${i === 0 ? 'active' : ''}" data-idx="${i}">
+      <span class="mo-name">@${esc(a.name)}</span>
+      <span class="mo-role">${esc(a.role || '')}</span>
+    </div>`
+  ).join('');
+  mentionPopup.classList.add('visible');
+  // Click handlers
+  mentionPopup.querySelectorAll('.mention-option').forEach(opt => {
+    opt.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectMention(parseInt(opt.dataset.idx));
+    });
+  });
+}
+
+function hideMentionPopup() {
+  mentionPopup.classList.remove('visible');
+  mentionStart = -1;
+  mentionFiltered = [];
+}
+
+function selectMention(idx) {
+  const selected = mentionFiltered[idx];
+  if (!selected) return;
+  const val = msgInput.value;
+  // Replace @query with @name + space
+  const before = val.substring(0, mentionStart);
+  const after = val.substring(msgInput.selectionStart);
+  msgInput.value = before + '@' + selected.name + ' ' + after;
+  // Set cursor after the inserted mention
+  const newPos = mentionStart + selected.name.length + 2;
+  msgInput.setSelectionRange(newPos, newPos);
+  // Auto-set recipient
+  const recipientSel = document.getElementById('recipient-select');
+  if (selected.name === 'all') {
+    recipientSel.value = '';
+  } else {
+    recipientSel.value = selected.name;
+  }
+  hideMentionPopup();
+  msgInput.focus();
+}
+
+msgInput.addEventListener('input', () => {
+  const query = getMentionQuery();
+  if (query !== null) {
+    showMentionPopup(query);
+  } else {
+    hideMentionPopup();
+  }
+});
+
+msgInput.addEventListener('keydown', e => {
+  if (mentionPopup.classList.contains('visible')) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      mentionActiveIndex = (mentionActiveIndex + 1) % mentionFiltered.length;
+      updateMentionActive();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      mentionActiveIndex = (mentionActiveIndex - 1 + mentionFiltered.length) % mentionFiltered.length;
+      updateMentionActive();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      selectMention(mentionActiveIndex);
+    } else if (e.key === 'Escape') {
+      hideMentionPopup();
+    }
+    return;
+  }
+  if (e.key === 'Enter') sendMessage();
+});
+
+msgInput.addEventListener('blur', () => {
+  // Small delay so click on popup registers
+  setTimeout(hideMentionPopup, 150);
+});
+
+function updateMentionActive() {
+  mentionPopup.querySelectorAll('.mention-option').forEach((opt, i) => {
+    opt.classList.toggle('active', i === mentionActiveIndex);
+  });
+}
+
+// --- Sidebar agent click → set recipient ---
+document.getElementById('agent-list').addEventListener('click', (e) => {
+  const item = e.target.closest('.agent-item');
+  if (!item) return;
+  const name = item.querySelector('.agent-name')?.textContent;
+  if (!name) return;
+  const recipientSel = document.getElementById('recipient-select');
+  recipientSel.value = name;
+  msgInput.focus();
+});
+
+// --- Send ---
+document.getElementById('send-btn').onclick = sendMessage;
+
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const content = input.value.trim();
+  if (!content) return;
+  const sender = document.getElementById('sender-input').value.trim() || 'dashboard';
+  const recipient = document.getElementById('recipient-select').value || null;
+  const thread = document.getElementById('thread-select').value || 'general';
+  const msg_type = document.getElementById('type-select').value || 'chat';
+
+  try {
+    await fetchJSON('/messages', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sender, content, recipient, thread, msg_type}),
+    });
+    input.value = '';
+    // Reset recipient to broadcast after send
+    document.getElementById('recipient-select').value = '';
+  } catch (err) {
+    addSystemMessage(`Send failed: ${err.message}`);
+  }
+}
+
+// --- SSE ---
+function connectSSE() {
+  const es = new EventSource(API + '/events' + (TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : ''));
+  const status = document.getElementById('conn-status');
+
+  es.onopen = () => { status.textContent = 'Connected'; };
+  es.onerror = () => {
+    status.textContent = 'Reconnecting...';
+    setTimeout(() => { if (es.readyState === EventSource.CLOSED) connectSSE(); }, 3000);
+  };
+
+  es.addEventListener('connected', () => { status.textContent = 'Connected'; });
+
+  es.addEventListener('message', (e) => {
+    const msg = JSON.parse(e.data);
+    // If we're filtering by thread and message is from another thread, skip rendering
+    if (currentThread && msg.thread !== currentThread) return;
+    const el = document.getElementById('messages');
+    // Remove empty state if present
+    const empty = el.querySelector('.empty');
+    if (empty) empty.remove();
+    el.innerHTML += renderMessage(msg);
+    el.scrollTop = el.scrollHeight;
+  });
+
+  es.addEventListener('agent_joined', (e) => {
+    const a = JSON.parse(e.data);
+    const idx = agents.findIndex(x => x.name === a.name);
+    if (idx >= 0) agents[idx] = a; else agents.push(a);
+    renderAgents();
+    addSystemMessage(`${a.name} joined`);
+  });
+
+  es.addEventListener('agent_status', (e) => {
+    const a = JSON.parse(e.data);
+    const idx = agents.findIndex(x => x.name === a.name);
+    if (idx >= 0) agents[idx] = a; else agents.push(a);
+    renderAgents();
+  });
+
+  es.addEventListener('thread_created', (e) => {
+    const t = JSON.parse(e.data);
+    if (!threads.find(x => x.name === t.name)) threads.push(t);
+    renderThreads();
+    addSystemMessage(`Thread #${t.name} created`);
+  });
+}
+
+// --- Init ---
+(async () => {
+  try {
+    await Promise.all([loadAgents(), loadThreads(), loadMessages()]);
+    connectSSE();
+  } catch (err) {
+    document.getElementById('conn-status').textContent = 'Load failed';
+    addSystemMessage(`Initial load failed: ${err.message}`);
+  }
+})();
+</script>
+</body>
+</html>

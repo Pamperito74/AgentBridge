@@ -1,0 +1,27 @@
+{
+  "build.finished": {
+    "properties": {
+      "build_id": {
+        "type": "string"
+      },
+      "ok": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "build_id",
+      "ok"
+    ]
+  },
+  "task.reviewed": {
+    "extends": "task.*",
+    "properties": {
+      "reviewer": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "reviewer"
+    ]
+  }
+}
