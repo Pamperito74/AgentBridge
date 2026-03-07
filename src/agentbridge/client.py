@@ -35,33 +35,25 @@ class AgentBridgeClient:
         self._read_task: asyncio.Task | None = None
         self._running = False
 
-    async def connect(self) -> None:
+    async def connect(self, capabilities: list[str] | None = None) -> None:
         """Connect to AgentBridge via WebSocket."""
         try:
-            # Convert ws:// to wss:// if needed (TLS)
-            ws_url = self.server_url.replace("http://", "ws://").replace(
-                "https://", "wss://"
-            )
+            ws_url = self.server_url.replace("http://", "ws://").replace("https://", "wss://")
             if not ws_url.startswith("ws"):
                 ws_url = f"ws://{ws_url}"
 
             self.ws = await websockets.connect(f"{ws_url}/ws")
             self._running = True
-            self._event_loop = asyncio.get_event_loop()
 
-            # Send registration
-            await self.ws.send(
-                json.dumps(
-                    {
-                        "type": "register",
-                        "name": self.name,
-                        "role": self.role,
-                    }
-                )
-            )
+            await self.ws.send(json.dumps({
+                "type": "register",
+                "name": self.name,
+                "role": self.role,
+                "capabilities": capabilities or [],
+            }))
 
-            # Start message reader
             self._read_task = asyncio.create_task(self._read_loop())
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             logger.info(f"Connected to AgentBridge as {self.name}")
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
@@ -72,9 +64,21 @@ class AgentBridgeClient:
         self._running = False
         if self._read_task:
             self._read_task.cancel()
+        if hasattr(self, "_heartbeat_task") and self._heartbeat_task:
+            self._heartbeat_task.cancel()
         if self.ws:
             await self.ws.close()
         logger.info(f"Disconnected from AgentBridge")
+
+    async def _heartbeat_loop(self) -> None:
+        """Send automatic heartbeat every 30s to prevent TTL expiry."""
+        while self._running:
+            await asyncio.sleep(30)
+            if self._running:
+                try:
+                    await self.heartbeat()
+                except Exception:
+                    pass
 
     async def _read_loop(self) -> None:
         """Read messages from WebSocket."""

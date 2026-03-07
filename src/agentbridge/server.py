@@ -4,12 +4,14 @@ import asyncio
 import json
 import logging
 import threading
-from contextlib import asynccontextmanager
-from logging.handlers import RotatingFileHandler
-import os
-from pathlib import Path
 import time
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Literal
+import os
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -26,6 +28,10 @@ from .ws_manager import get_ws_manager
 store: MessageStore | None = None
 _store_lock = threading.Lock()
 
+# Reference to the uvicorn event loop — captured at startup so MCP tools
+# (which run synchronously) can submit coroutines to the async WS manager.
+_uvicorn_loop: asyncio.AbstractEventLoop | None = None
+
 
 def get_store() -> MessageStore:
     global store
@@ -33,6 +39,7 @@ def get_store() -> MessageStore:
         if store is None:
             store = MessageStore()
         return store
+
 
 # SSE subscribers: list of (event loop, asyncio.Queue)
 _sse_subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue[str]]] = []
@@ -90,10 +97,32 @@ def _broadcast_sse(event: str, data: dict):
         loop.call_soon_threadsafe(_safe_put, queue, message)
 
 
+def _try_ws_deliver(recipient: str, message: dict):
+    """Best-effort real-time delivery to a WS-connected agent (non-blocking).
+
+    Called from sync HTTP handlers. Uses the captured uvicorn loop.
+    Silently skips if the recipient isn't WS-connected.
+    """
+    if _uvicorn_loop is None or not _uvicorn_loop.is_running():
+        return
+    manager = get_ws_manager()
+    if not manager.is_connected(recipient):
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.send_to_agent(recipient, message),
+            _uvicorn_loop,
+        ).result(timeout=2)
+    except Exception:
+        pass  # WS delivery is best-effort; store already persisted
+
+
 # ── HTTP API (FastAPI) ──────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _uvicorn_loop
+    _uvicorn_loop = asyncio.get_running_loop()
     get_store()
     yield
     global store
@@ -102,7 +131,8 @@ async def lifespan(app: FastAPI):
             store.close()
             store = None
 
-http_app = FastAPI(title="AgentBridge", version="0.2.0", lifespan=lifespan)
+
+http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
 
 
 @http_app.middleware("http")
@@ -118,9 +148,11 @@ async def auth_and_logging_middleware(request: Request, call_next):
     logger.info("%s %s %s %sms", request.method, path, response.status_code, elapsed_ms)
     return response
 
+
 class RegisterAgentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     role: str = Field(default="", max_length=512)
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class HeartbeatRequest(BaseModel):
@@ -138,8 +170,9 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=10000)
     recipient: str | None = Field(default=None, max_length=128)
     thread: str = Field(default="general", min_length=1, max_length=128)
-    msg_type: Literal["chat", "request", "status", "alert"] = "chat"
+    msg_type: Literal["chat", "request", "response", "status", "alert"] = "chat"
     artifacts: list[ArtifactRequest] | None = None
+    correlation_id: str | None = None
 
 
 class CreateThreadRequest(BaseModel):
@@ -170,7 +203,7 @@ class EventSchemaWriteRequest(BaseModel):
 
 @http_app.post("/agents")
 def http_register_agent(body: RegisterAgentRequest):
-    agent = get_store().register_agent(body.name, body.role)
+    agent = get_store().register_agent(body.name, body.role, body.capabilities)
     result = agent.model_dump(mode="json")
     _broadcast_sse("agent_joined", result)
     return result
@@ -191,6 +224,7 @@ def http_list_actors():
             "type": "agent",
             "status": data.get("status", "online"),
             "role": data.get("role", ""),
+            "capabilities": data.get("capabilities", []),
             "working_on": data.get("working_on", ""),
             "last_seen": data.get("last_seen"),
         })
@@ -199,9 +233,7 @@ def http_list_actors():
 
 @http_app.post("/agents/{name}/heartbeat")
 def http_heartbeat(name: str, body: HeartbeatRequest):
-    agent = get_store().heartbeat(
-        name, status=body.status, working_on=body.working_on
-    )
+    agent = get_store().heartbeat(name, status=body.status, working_on=body.working_on)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     result = agent.model_dump(mode="json")
@@ -220,9 +252,28 @@ def http_send_message(body: SendMessageRequest):
         thread=body.thread,
         msg_type=body.msg_type,
         artifacts=[a.model_dump() for a in body.artifacts] if body.artifacts else None,
+        correlation_id=body.correlation_id,
     )
     result = msg.model_dump(mode="json")
     _broadcast_sse("message", result)
+
+    # Real-time WS delivery to recipient if connected
+    if body.recipient:
+        _try_ws_deliver(body.recipient, {"type": "message", **result})
+
+    # If this is a response, resolve any pending WS future
+    if body.msg_type == "response" and body.correlation_id and _uvicorn_loop:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                get_ws_manager().handle_response(body.correlation_id, {
+                    "content": body.content,
+                    "status": "success",
+                }),
+                _uvicorn_loop,
+            )
+        except Exception:
+            pass
+
     return result
 
 
@@ -233,12 +284,14 @@ def http_read_messages(
     as_agent: str | None = Query(None),
     since: str | None = Query(None),
     before: str | None = Query(None),
+    correlation_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
 ):
     return [
         m.model_dump(mode="json")
         for m in get_store().read_messages(
-            thread=thread, since=since, before=before, limit=limit, sender=sender, as_agent=as_agent,
+            thread=thread, since=since, before=before, limit=limit,
+            sender=sender, as_agent=as_agent, correlation_id=correlation_id,
         )
     ]
 
@@ -266,6 +319,8 @@ def http_send_event(body: EventWriteRequest):
     result = msg.model_dump(mode="json")
     _broadcast_sse("event", result)
     _broadcast_sse("message", result)
+    if body.target_id:
+        _try_ws_deliver(body.target_id, {"type": "event", **result})
     return result
 
 
@@ -333,7 +388,6 @@ async def sse_events(request: Request):
 
     async def event_generator():
         try:
-            # Send initial heartbeat
             yield "event: connected\ndata: {}\n\n"
             while True:
                 if await request.is_disconnected():
@@ -345,9 +399,7 @@ async def sse_events(request: Request):
                     yield ": keepalive\n\n"
         finally:
             with _sse_lock:
-                _sse_subscribers[:] = [
-                    s for s in _sse_subscribers if s[1] is not queue
-                ]
+                _sse_subscribers[:] = [s for s in _sse_subscribers if s[1] is not queue]
 
     return StreamingResponse(
         event_generator(),
@@ -368,28 +420,19 @@ def serve_dashboard():
 
 @http_app.get("/health")
 def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}
 
 
-# --- WebSocket (Synchronous Request-Response) ---
+# --- WebSocket ---
 
 @http_app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for synchronous request-response communication.
-
-    Supports:
-    - registration: {type: "register", name: str, role: str}
-    - request: {type: "request", correlation_id: str, recipient: str, content: str, thread: str}
-    - response: {type: "response", correlation_id: str, content: str, status: "success"|"error"}
-    - message: {type: "message"|"broadcast", sender: str, content: str, thread: str}
-    - heartbeat: {type: "heartbeat", status: str, working_on: str}
-    """
+    """WebSocket endpoint for synchronous request-response communication."""
     await websocket.accept()
     manager = get_ws_manager()
     agent_name: str | None = None
 
     try:
-        # Wait for registration
         data = await websocket.receive_text()
         msg = json.loads(data)
 
@@ -400,46 +443,43 @@ async def websocket_endpoint(websocket: WebSocket):
 
         agent_name = msg.get("name")
         role = msg.get("role", "")
+        capabilities = msg.get("capabilities", [])
 
         if not agent_name:
             await websocket.send_json({"error": "Missing agent name"})
             await websocket.close()
             return
 
-        # Register agent
-        get_store().register_agent(agent_name, role)
+        get_store().register_agent(agent_name, role, capabilities)
         conn = await manager.register_connection(agent_name, websocket)
 
         await websocket.send_json({
             "type": "registered",
             "agent_id": agent_name,
-            "timestamp": str(time.time())
+            "timestamp": str(time.time()),
         })
 
-        # Handle incoming messages
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
             msg_type = message.get("type")
 
             if msg_type == "request":
-                # Request to another agent
                 recipient = message.get("recipient")
                 content = message.get("content", "")
                 correlation_id = message.get("correlation_id")
 
-                try:
-                    # Store in message history
-                    stored = get_store().add_message(
-                        sender=agent_name,
-                        content=content,
-                        recipient=recipient,
-                        thread=message.get("thread", "general"),
-                        msg_type="request",
-                        correlation_id=correlation_id,
-                    )
+                stored = get_store().add_message(
+                    sender=agent_name,
+                    content=content,
+                    recipient=recipient,
+                    thread=message.get("thread", "general"),
+                    msg_type="request",
+                    correlation_id=correlation_id,
+                )
+                _broadcast_sse("message", stored.model_dump(mode="json"))
 
-                    # Send via WebSocket manager for real-time delivery
+                try:
                     await manager.send_to_agent(recipient, {
                         "type": "request",
                         "correlation_id": correlation_id,
@@ -448,7 +488,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         "thread": message.get("thread", "general"),
                     })
                 except ValueError as e:
-                    # Recipient not connected, send error response
                     await websocket.send_json({
                         "type": "response",
                         "correlation_id": correlation_id,
@@ -457,11 +496,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
 
             elif msg_type == "response":
-                # Response to a request
                 correlation_id = message.get("correlation_id")
                 content = message.get("content", "")
 
-                # Store in message history
                 get_store().add_message(
                     sender=agent_name,
                     content=content,
@@ -470,14 +507,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     correlation_id=correlation_id,
                 )
 
-                # Route back to requester
                 await manager.handle_response(correlation_id, {
                     "content": content,
                     "status": message.get("status", "success"),
                 })
 
             elif msg_type in ("message", "broadcast"):
-                # Regular message
                 stored = get_store().add_message(
                     sender=agent_name,
                     content=message.get("content", ""),
@@ -486,9 +521,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     msg_type=message.get("msg_type", "chat"),
                 )
                 _broadcast_sse("message", stored.model_dump(mode="json"))
+                # Deliver to recipient's WS connection if present
+                if message.get("recipient"):
+                    try:
+                        await manager.send_to_agent(message["recipient"], {
+                            "type": "message",
+                            **stored.model_dump(mode="json"),
+                        })
+                    except ValueError:
+                        pass
 
             elif msg_type == "heartbeat":
-                # Heartbeat for keep-alive
                 get_store().heartbeat(
                     agent_name,
                     status=message.get("status", "online"),
@@ -499,10 +542,8 @@ async def websocket_endpoint(websocket: WebSocket):
         if agent_name:
             await manager.unregister_connection(agent_name)
             logger.info(f"Agent {agent_name} disconnected")
-
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON from {agent_name}: {e}")
-
     except Exception as e:
         logger.error(f"WebSocket error for {agent_name}: {e}")
         if agent_name:
@@ -511,20 +552,34 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # ── MCP Server (FastMCP) ───────────────────────────────────────────
 
-mcp = FastMCP("AgentBridge", instructions="Inter-agent communication server. Use these tools to send and receive messages with other AI agents working on the same codebase.")
+mcp = FastMCP(
+    "AgentBridge",
+    instructions=(
+        "Inter-agent communication server. Use these tools to send and receive messages "
+        "with other AI agents. Use request_agent() for synchronous calls where you need "
+        "an answer before continuing."
+    ),
+)
 
 
 @mcp.tool()
-def register(name: str, role: str = "") -> str:
-    """Register this agent with the bridge. Call this first with a unique name and optional role description."""
-    agent = get_store().register_agent(name, role)
+def register(name: str, role: str = "", capabilities: list[str] | None = None) -> str:
+    """Register this agent. Call first with a unique name, optional role, and optional
+    capabilities list (e.g. ['code-review', 'testing', 'deployment'])."""
+    agent = get_store().register_agent(name, role, capabilities)
     _broadcast_sse("agent_joined", agent.model_dump(mode="json"))
-    return f"Registered as '{agent.name}'" + (f" ({agent.role})" if agent.role else "")
+    cap_str = f" capabilities=[{', '.join(agent.capabilities)}]" if agent.capabilities else ""
+    return f"Registered as '{agent.name}'" + (f" ({agent.role})" if agent.role else "") + cap_str
 
 
 @mcp.tool()
-def send(sender: str, content: str, recipient: str | None = None, thread: str = "general", msg_type: str = "chat", artifacts: list[dict] | None = None) -> str:
-    """Send a message. Set recipient to target a specific agent, or leave empty to broadcast. msg_type can be: chat, request, status, alert. artifacts is a list of {type, content} objects."""
+def send(
+    sender: str, content: str, recipient: str | None = None,
+    thread: str = "general", msg_type: str = "chat",
+    artifacts: list[dict] | None = None,
+) -> str:
+    """Send a fire-and-forget message. For synchronous calls where you need a reply,
+    use request_agent() instead. msg_type: chat, request, status, alert."""
     if msg_type not in MESSAGE_TYPES:
         raise ValueError(f"Invalid msg_type '{msg_type}'. Valid: {', '.join(MESSAGE_TYPES)}")
     msg = get_store().add_message(
@@ -532,14 +587,174 @@ def send(sender: str, content: str, recipient: str | None = None, thread: str = 
         thread=thread, msg_type=msg_type, artifacts=artifacts,
     )
     _broadcast_sse("message", msg.model_dump(mode="json"))
+    # Real-time WS delivery
+    if recipient:
+        _try_ws_deliver(recipient, {"type": "message", **msg.model_dump(mode="json")})
     target = f" → {msg.recipient}" if msg.recipient else " (broadcast)"
     mentions = f" [mentions: {', '.join(msg.mentions)}]" if msg.mentions else ""
     return f"[{msg.msg_type}] Sent to [{msg.thread}]{target}: {msg.content}{mentions}"
 
 
 @mcp.tool()
-def read(thread: str | None = None, sender: str | None = None, as_agent: str | None = None, limit: int = 20) -> str:
-    """Read recent messages. Optionally filter by thread or sender. Use as_agent to see only your inbox (messages to you + broadcasts)."""
+def request_agent(
+    sender: str,
+    recipient: str,
+    content: str,
+    timeout_sec: float = 60.0,
+    thread: str = "general",
+) -> str:
+    """Send a request to another agent and WAIT synchronously for their response.
+
+    Blocks until the recipient calls respond() with the matching correlation_id,
+    or until timeout_sec elapses. Use this when you need an answer before continuing.
+
+    Returns the recipient's response content, or raises TimeoutError.
+    """
+    correlation_id = str(uuid.uuid4())
+
+    # Persist request so recipient can see it even if not WS-connected
+    get_store().add_message(
+        sender=sender,
+        recipient=recipient,
+        content=content,
+        thread=thread,
+        msg_type="request",
+        correlation_id=correlation_id,
+    )
+    _broadcast_sse("message", {"sender": sender, "recipient": recipient, "content": content,
+                                "msg_type": "request", "correlation_id": correlation_id})
+
+    # Best-effort real-time delivery via WS
+    _try_ws_deliver(recipient, {
+        "type": "request",
+        "correlation_id": correlation_id,
+        "sender": sender,
+        "content": content,
+        "thread": thread,
+    })
+
+    # Poll DB for response with this correlation_id
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        responses = get_store().read_messages(correlation_id=correlation_id, limit=10)
+        response = next((m for m in responses if m.msg_type == "response"), None)
+        if response:
+            return response.content
+        time.sleep(0.4)
+
+    raise TimeoutError(
+        f"No response from '{recipient}' within {timeout_sec}s "
+        f"(correlation_id={correlation_id})"
+    )
+
+
+@mcp.tool()
+def wait_for_request(agent_name: str, timeout_sec: float = 30.0) -> str:
+    """Block until an incoming request arrives for this agent.
+
+    Returns a JSON object with: correlation_id, sender, content, thread, timestamp.
+    Use the correlation_id with respond() to reply.
+    Returns a timeout status dict if nothing arrives within timeout_sec.
+    """
+    start_ts = datetime.now(timezone.utc).isoformat()
+    deadline = time.monotonic() + timeout_sec
+
+    while time.monotonic() < deadline:
+        msgs = get_store().read_messages(as_agent=agent_name, since=start_ts, limit=20)
+        for m in msgs:
+            if m.msg_type == "request" and m.correlation_id:
+                return json.dumps({
+                    "correlation_id": m.correlation_id,
+                    "sender": m.sender,
+                    "content": m.content,
+                    "thread": m.thread,
+                    "timestamp": m.timestamp.isoformat(),
+                })
+        time.sleep(0.4)
+
+    return json.dumps({"status": "timeout", "message": f"No requests within {timeout_sec}s"})
+
+
+@mcp.tool()
+def respond(
+    agent_name: str,
+    correlation_id: str,
+    content: str,
+    status: str = "success",
+) -> str:
+    """Send a response to a specific request identified by correlation_id.
+
+    The agent that called request_agent() will unblock and receive this content.
+    status: 'success' or 'error'.
+    """
+    # Look up the original request to route the response back
+    originals = get_store().read_messages(correlation_id=correlation_id, limit=10)
+    original = next((m for m in originals if m.msg_type == "request"), None)
+    requester = original.sender if original else None
+    thread = original.thread if original else "general"
+
+    get_store().add_message(
+        sender=agent_name,
+        recipient=requester,
+        content=content,
+        thread=thread,
+        msg_type="response",
+        correlation_id=correlation_id,
+    )
+
+    # Notify WS manager so any awaiting future resolves immediately
+    if _uvicorn_loop and _uvicorn_loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(
+                get_ws_manager().handle_response(correlation_id, {
+                    "content": content,
+                    "status": status,
+                }),
+                _uvicorn_loop,
+            ).result(timeout=1)
+        except Exception:
+            pass
+
+    # Best-effort real-time delivery to the requester
+    if requester:
+        _try_ws_deliver(requester, {
+            "type": "response",
+            "correlation_id": correlation_id,
+            "content": content,
+            "status": status,
+        })
+
+    return f"Response sent (correlation_id={correlation_id}, to={requester or 'unknown'})"
+
+
+@mcp.tool()
+def find_agent(capability: str) -> str:
+    """Find agents that advertise a given capability.
+
+    Returns a list of agent names and roles that can handle the capability.
+    Example: find_agent('code-review') → agents that registered with that capability.
+    """
+    matches = get_store().find_agents_by_capability(capability)
+    if not matches:
+        return f"No agents found with capability '{capability}'."
+    lines = []
+    for a in matches:
+        parts = [f"  {a.name}"]
+        if a.role:
+            parts.append(f"({a.role})")
+        parts.append(f"[{a.status}]")
+        lines.append(" ".join(parts))
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def read(
+    thread: str | None = None,
+    sender: str | None = None,
+    as_agent: str | None = None,
+    limit: int = 20,
+) -> str:
+    """Read recent messages. Filter by thread or sender. Use as_agent to see your inbox."""
     messages = get_store().read_messages(thread=thread, sender=sender, as_agent=as_agent, limit=limit)
     if not messages:
         return "No messages."
@@ -548,14 +763,15 @@ def read(thread: str | None = None, sender: str | None = None, as_agent: str | N
         prefix = f"[{m.thread}] " if m.thread != "general" else ""
         to = f" → {m.recipient}" if m.recipient else ""
         type_tag = f"[{m.msg_type}] " if m.msg_type != "chat" else ""
-        artifact_tag = f" 📎{len(m.artifacts)}" if m.artifacts else ""
-        lines.append(f"{type_tag}{prefix}{m.sender}{to}: {m.content}{artifact_tag}")
+        artifact_tag = f" [{len(m.artifacts)} artifacts]" if m.artifacts else ""
+        corr_tag = f" (cid={m.correlation_id[:8]})" if m.correlation_id else ""
+        lines.append(f"{type_tag}{prefix}{m.sender}{to}: {m.content}{artifact_tag}{corr_tag}")
     return "\n".join(lines)
 
 
 @mcp.tool()
 def agents() -> str:
-    """List all connected agents."""
+    """List all connected agents with their capabilities."""
     agent_list = get_store().list_agents()
     if not agent_list:
         return "No agents connected."
@@ -567,13 +783,15 @@ def agents() -> str:
         parts.append(f"[{a.status}]")
         if a.working_on:
             parts.append(f"— {a.working_on}")
+        if a.capabilities:
+            parts.append(f"caps=[{', '.join(a.capabilities)}]")
         lines.append(" ".join(parts))
     return "\n".join(lines)
 
 
 @mcp.tool()
 def heartbeat(name: str, status: str = "online", working_on: str = "") -> str:
-    """Update agent status. status: online|busy|idle. working_on: brief description of current task."""
+    """Update agent status. status: online|busy|idle."""
     if status not in {"online", "busy", "idle"}:
         raise ValueError("status must be one of: online, busy, idle")
     agent = get_store().heartbeat(name, status=status, working_on=working_on)
@@ -618,17 +836,13 @@ def thread_summary(name: str) -> str:
 # ── Entry point ─────────────────────────────────────────────────────
 
 def _run_http_server():
-    """Run HTTP server in a background thread."""
     uvicorn.run(http_app, host="0.0.0.0", port=7890, log_level="warning")
 
 
 def main():
     """Start both MCP (stdio) and HTTP servers."""
-    # Start HTTP in background thread
     http_thread = threading.Thread(target=_run_http_server, daemon=True)
     http_thread.start()
-
-    # Run MCP on stdio (blocking)
     mcp.run()
 
 
