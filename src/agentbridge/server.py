@@ -231,6 +231,28 @@ def http_list_actors():
     return actors
 
 
+@http_app.delete("/agents/{name}")
+def http_kick_agent(name: str):
+    """Remove an agent from the registry and drop their WS connection if active."""
+    manager = get_ws_manager()
+    # Drop WS connection if live
+    if _uvicorn_loop and _uvicorn_loop.is_running() and manager.is_connected(name):
+        try:
+            asyncio.run_coroutine_threadsafe(
+                manager.unregister_connection(name),
+                _uvicorn_loop,
+            ).result(timeout=2)
+        except Exception:
+            pass
+    # Remove from DB
+    with get_store()._lock:
+        get_store()._conn.execute("DELETE FROM agents WHERE name = ?", (name,))
+        get_store()._conn.commit()
+    result = {"kicked": name}
+    _broadcast_sse("agent_kicked", {"name": name})
+    return result
+
+
 @http_app.post("/agents/{name}/heartbeat")
 def http_heartbeat(name: str, body: HeartbeatRequest):
     agent = get_store().heartbeat(name, status=body.status, working_on=body.working_on)
@@ -725,6 +747,28 @@ def respond(
         })
 
     return f"Response sent (correlation_id={correlation_id}, to={requester or 'unknown'})"
+
+
+@mcp.tool()
+def kick_agent(name: str) -> str:
+    """Remove an agent from the registry and terminate their connection.
+
+    Use when an agent is stale, misbehaving, or needs to be restarted.
+    """
+    manager = get_ws_manager()
+    if _uvicorn_loop and _uvicorn_loop.is_running() and manager.is_connected(name):
+        try:
+            asyncio.run_coroutine_threadsafe(
+                manager.unregister_connection(name),
+                _uvicorn_loop,
+            ).result(timeout=2)
+        except Exception:
+            pass
+    with get_store()._lock:
+        get_store()._conn.execute("DELETE FROM agents WHERE name = ?", (name,))
+        get_store()._conn.commit()
+    _broadcast_sse("agent_kicked", {"name": name})
+    return f"Agent '{name}' kicked and removed from registry."
 
 
 @mcp.tool()
