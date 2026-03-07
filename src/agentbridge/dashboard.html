@@ -29,7 +29,45 @@
     --radius: 10px;
     --radius-sm: 6px;
     --sidebar: 240px;
+    --compose-h: 110px;
+    --agents-h: 200px;
   }
+  :root[data-theme="light"] {
+    --bg: #f4f4f8;
+    --bg-card: #ffffff;
+    --bg-hover: #f0f0f6;
+    --bg-input: #f7f7fb;
+    --border: #e2e2ec;
+    --border-light: #d0d0de;
+    --fg: #1a1a2e;
+    --fg-dim: #8888a8;
+    --fg-mid: #5555778;
+    --accent: #6c4ff0;
+    --accent-dim: #4f34c8;
+    --accent-glow: rgba(108,79,240,0.10);
+    --green: #10b981;
+    --green-dim: rgba(16,185,129,0.10);
+    --yellow: #d97706;
+    --yellow-dim: rgba(217,119,6,0.10);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.10);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.10);
+  }
+
+  /* Theme toggle */
+  .theme-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg-mid);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .theme-btn:hover { background: var(--bg-hover); color: var(--fg); }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
   body {
@@ -37,15 +75,47 @@
     background: var(--bg);
     color: var(--fg);
     display: grid;
-    grid-template-columns: var(--sidebar) 1fr;
+    grid-template-columns: var(--sidebar) 4px 1fr;
     grid-template-rows: 52px 1fr;
     height: 100vh;
     font-size: 14px;
+    user-select: none;
   }
+  body.resizing { cursor: col-resize; }
+  body.resizing-v { cursor: row-resize; }
+
+  /* ── Resize handles ── */
+  .rz-sidebar {
+    grid-column: 2; grid-row: 2;
+    background: var(--border);
+    cursor: col-resize;
+    transition: background 0.15s;
+    z-index: 10;
+  }
+  .rz-sidebar:hover, .rz-sidebar.active { background: var(--accent); }
+
+  .rz-compose {
+    height: 4px;
+    background: var(--border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .rz-compose:hover, .rz-compose.active { background: var(--accent); }
+
+  .rz-sidebar-split {
+    height: 4px;
+    background: var(--border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .rz-sidebar-split:hover, .rz-sidebar-split.active { background: var(--accent); }
 
   /* ── Header ── */
   header {
     grid-column: 1 / -1;
+    grid-row: 1;
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -119,8 +189,9 @@
 
   /* ── Sidebar ── */
   aside {
+    grid-column: 1; grid-row: 2;
     background: var(--bg-card);
-    border-right: 1px solid var(--border);
+    border-right: none;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -154,7 +225,8 @@
     letter-spacing: 0;
     text-transform: none;
   }
-  .agent-list, .thread-list { overflow-y: auto; max-height: 220px; }
+  .agent-list { overflow-y: auto; height: var(--agents-h); max-height: var(--agents-h); }
+  .thread-list { overflow-y: auto; }
 
   /* Agents */
   .agent-item {
@@ -237,6 +309,7 @@
 
   /* ── Main ── */
   main {
+    grid-column: 3; grid-row: 2;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -371,6 +444,9 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    height: var(--compose-h);
+    flex-shrink: 0;
+    overflow: hidden;
   }
   .compose-controls {
     display: flex;
@@ -491,6 +567,7 @@
       <span>You:</span>
       <input type="text" id="sender-input" value="dashboard" placeholder="Your name">
     </div>
+    <button class="theme-btn" id="theme-btn" title="Toggle theme">🌙</button>
     <div class="conn-badge" id="conn-badge">Connecting</div>
   </div>
 </header>
@@ -505,11 +582,14 @@
       <div style="padding: 8px 14px; font-size: 12px; color: var(--fg-dim);">No agents online</div>
     </div>
   </div>
+  <div class="rz-sidebar-split" id="rz-sidebar-split"></div>
   <div class="sidebar-section" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
     <div class="sidebar-label">Threads</div>
     <div class="thread-list" id="thread-list" style="flex:1; overflow-y: auto; max-height: none;"></div>
   </div>
 </aside>
+
+<div class="rz-sidebar" id="rz-sidebar"></div>
 
 <main>
   <div class="thread-header">
@@ -522,6 +602,7 @@
       <p>No messages yet. Agents will appear here when they communicate.</p>
     </div>
   </div>
+  <div class="rz-compose" id="rz-compose"></div>
   <div class="compose">
     <div class="compose-controls">
       <label>To</label>
@@ -941,6 +1022,100 @@ function connectSSE() {
     addSystemMsg(`Thread #${t.name} created`);
   });
 }
+
+// ── Resize handles
+const root = document.documentElement;
+
+function loadSizes() {
+  const sw = localStorage.getItem('ab-sidebar');
+  const ch = localStorage.getItem('ab-compose-h');
+  const ah = localStorage.getItem('ab-agents-h');
+  if (sw) root.style.setProperty('--sidebar', sw + 'px');
+  if (ch) root.style.setProperty('--compose-h', ch + 'px');
+  if (ah) root.style.setProperty('--agents-h', ah + 'px');
+}
+loadSizes();
+
+function makeDrag({ handle, onStart, onMove, onEnd, cursor }) {
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const startData = onStart(e);
+    handle.classList.add('active');
+    document.body.classList.add(cursor === 'col-resize' ? 'resizing' : 'resizing-v');
+    const move = ev => onMove(ev, startData);
+    const up = ev => {
+      onMove(ev, startData);
+      handle.classList.remove('active');
+      document.body.classList.remove('resizing', 'resizing-v');
+      if (onEnd) onEnd();
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+}
+
+// Sidebar width
+makeDrag({
+  handle: document.getElementById('rz-sidebar'),
+  cursor: 'col-resize',
+  onStart: e => ({
+    x: e.clientX,
+    w: parseInt(getComputedStyle(root).getPropertyValue('--sidebar')) || 240,
+  }),
+  onMove: (e, { x, w }) => {
+    const nw = Math.max(160, Math.min(420, w + e.clientX - x));
+    root.style.setProperty('--sidebar', nw + 'px');
+    localStorage.setItem('ab-sidebar', nw);
+  },
+});
+
+// Compose height
+makeDrag({
+  handle: document.getElementById('rz-compose'),
+  cursor: 'row-resize',
+  onStart: e => ({
+    y: e.clientY,
+    h: parseInt(getComputedStyle(root).getPropertyValue('--compose-h')) || 110,
+  }),
+  onMove: (e, { y, h }) => {
+    const nh = Math.max(80, Math.min(320, h - (e.clientY - y)));
+    root.style.setProperty('--compose-h', nh + 'px');
+    localStorage.setItem('ab-compose-h', nh);
+  },
+});
+
+// Agents/Threads split inside sidebar
+makeDrag({
+  handle: document.getElementById('rz-sidebar-split'),
+  cursor: 'row-resize',
+  onStart: e => ({
+    y: e.clientY,
+    h: parseInt(getComputedStyle(root).getPropertyValue('--agents-h')) || 200,
+  }),
+  onMove: (e, { y, h }) => {
+    const nh = Math.max(80, Math.min(460, h + (e.clientY - y)));
+    root.style.setProperty('--agents-h', nh + 'px');
+    localStorage.setItem('ab-agents-h', nh);
+  },
+});
+
+// ── Theme toggle
+const themeBtn = document.getElementById('theme-btn');
+let currentTheme = localStorage.getItem('ab-theme') || 'dark';
+
+function applyTheme(t) {
+  currentTheme = t;
+  root.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+  themeBtn.textContent = t === 'light' ? '🌙' : '☀️';
+  localStorage.setItem('ab-theme', t);
+}
+applyTheme(currentTheme);
+
+themeBtn.addEventListener('click', () => {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
 
 // ── Init
 (async () => {
