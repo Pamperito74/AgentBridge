@@ -363,7 +363,7 @@ def _task_gemini(task: dict) -> dict:
     except FileNotFoundError:
         return {
             "success": False,
-            "error": "gemini CLI not found. Install: npm install -g @google/generative-ai-cli",
+            "error": "gemini CLI not found. Install: npm install -g @google/gemini-cli",
         }
 
 

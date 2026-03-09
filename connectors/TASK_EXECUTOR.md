@@ -41,7 +41,7 @@ The executor:
 - Python 3.10+ with the `requests` package available
 - For `git_commit` / `git_pr` tasks: `git` and `gh` CLI installed and authenticated
 - For `aider` tasks: `aider` installed (`pipx install aider-chat`)
-- For `gemini` tasks: Gemini CLI installed and authenticated (`npm install -g @google/generative-ai-cli && gemini auth login`)
+- For `gemini` tasks: Gemini CLI installed and authenticated (`npm install -g @google/gemini-cli && gemini auth login`)
 
 ---
 
@@ -250,7 +250,7 @@ require writing back to disk.
 **Prerequisites:**
 
 ```bash
-npm install -g @google/generative-ai-cli
+npm install -g @google/gemini-cli
 gemini auth login
 ```
 
