@@ -36,6 +36,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import requests
@@ -47,11 +48,18 @@ BRIDGE = os.environ.get("AGENTBRIDGE_URL", "http://localhost:7890")
 AGENT_NAME = os.environ.get("EXECUTOR_NAME", "task-executor")
 POLL_INTERVAL = int(os.environ.get("EXECUTOR_POLL_INTERVAL", "3"))
 AIDER_MODEL = os.environ.get("AIDER_MODEL", "ollama/qwen2.5-coder:7b")
+HEARTBEAT_INTERVAL = 30  # seconds — well within the 4h agent TTL
 
 # Maximum bytes captured from stdout / stderr to avoid flooding the bridge
 STDOUT_CAP = 4000
 STDERR_CAP = 1000
 SHELL_TIMEOUT = 120  # seconds
+
+CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "test"]
+
+# Cursor: ID of the last message we processed (persisted in memory only).
+# AgentBridge's delivery_cursors table tracks this server-side via since_id.
+_last_message_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +71,7 @@ def register() -> None:
     try:
         r = requests.post(
             f"{BRIDGE}/agents",
-            json={"name": AGENT_NAME, "role": "executor"},
+            json={"name": AGENT_NAME, "role": "executor", "capabilities": CAPABILITIES},
             timeout=5,
         )
         r.raise_for_status()
@@ -73,16 +81,40 @@ def register() -> None:
         sys.exit(1)
 
 
+def _heartbeat_loop() -> None:
+    """Background thread: send heartbeat every HEARTBEAT_INTERVAL seconds."""
+    while True:
+        time.sleep(HEARTBEAT_INTERVAL)
+        try:
+            requests.post(
+                f"{BRIDGE}/agents/{AGENT_NAME}/heartbeat",
+                json={"status": "online", "working_on": ""},
+                timeout=5,
+            )
+        except requests.RequestException:
+            pass  # server may be momentarily unavailable; will retry
+
+
+def start_heartbeat() -> None:
+    t = threading.Thread(target=_heartbeat_loop, daemon=True)
+    t.start()
+
+
 def poll_messages() -> list[dict]:
-    """Return unread messages addressed to this executor."""
+    """Return only *new* messages using the since_id cursor to prevent reprocessing."""
+    global _last_message_id
+    params: dict = {"as_agent": AGENT_NAME, "limit": 20}
+    if _last_message_id:
+        params["since_id"] = _last_message_id
     try:
-        r = requests.get(
-            f"{BRIDGE}/messages",
-            params={"recipient": AGENT_NAME, "limit": 10},
-            timeout=5,
-        )
+        r = requests.get(f"{BRIDGE}/messages", params=params, timeout=5)
         r.raise_for_status()
-        return r.json().get("messages", [])
+        # Response is a list directly (not wrapped in {"messages": ...})
+        raw = r.json()
+        messages = raw if isinstance(raw, list) else raw.get("messages", [])
+        if messages:
+            _last_message_id = messages[-1]["id"]
+        return messages
     except requests.RequestException:
         return []
 
@@ -223,12 +255,17 @@ def _task_test(task: dict) -> dict:
 
 def main() -> None:
     register()
+    start_heartbeat()
     print(f"[executor] Polling every {POLL_INTERVAL}s — send tasks via AgentBridge to '{AGENT_NAME}'")
+    print(f"[executor] Heartbeat every {HEARTBEAT_INTERVAL}s")
     print("[executor] Ctrl-C to stop\n")
 
     while True:
         messages = poll_messages()
         for msg in messages:
+            # Skip our own replies to avoid feedback loops
+            if msg.get("sender") == AGENT_NAME:
+                continue
             handle(msg)
         time.sleep(POLL_INTERVAL)
 
