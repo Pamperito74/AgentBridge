@@ -286,9 +286,19 @@ async def http_send_message(body: SendMessageRequest):
     result = msg.model_dump(mode="json")
     _broadcast_sse("message", result)
 
-    # Real-time WS delivery to recipient if connected
+    # Real-time WS delivery to recipient if connected, or broadcast to all
     if body.recipient:
         _try_ws_deliver(body.recipient, {"type": "message", **result})
+    else:
+        # Broadcast to all WS-connected agents except the sender
+        if _uvicorn_loop and _uvicorn_loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    get_ws_manager().broadcast({"type": "message", **result}, exclude=body.sender),
+                    _uvicorn_loop,
+                ).result(timeout=2)
+            except Exception:
+                pass
 
     # If this is a response, resolve any pending WS future
     if body.msg_type == "response" and body.correlation_id and _uvicorn_loop:
@@ -635,7 +645,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     msg_type=message.get("msg_type", "chat"),
                 )
                 _broadcast_sse("message", stored.model_dump(mode="json"))
-                # Deliver to recipient's WS connection if present
+                # Deliver to recipient's WS connection, or broadcast if no recipient
                 if message.get("recipient"):
                     try:
                         await manager.send_to_agent(message["recipient"], {
@@ -644,6 +654,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                     except ValueError:
                         pass
+                else:
+                    await manager.broadcast(
+                        {"type": "message", **stored.model_dump(mode="json")},
+                        exclude=agent_name,
+                    )
 
             elif msg_type == "heartbeat":
                 get_store().heartbeat(
