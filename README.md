@@ -1,62 +1,184 @@
 # AgentBridge
 
-Inter-agent communication server for AI coding agents. MCP + HTTP + CLI.
+A local communication hub for AI coding agents. Lets multiple Claude Code
+sessions, scripts, and tools share messages and coordinate work in real time —
+without any external service or API key.
 
-Two Claude Code sessions debugging the same issue can now share findings in real-time instead of duplicating work.
+```
+Claude Code (Session 1)  ──┐
+Claude Code (Session 2)  ──┤──▶  AgentBridge  ──▶  task-executor
+Script / curl            ──┘     localhost:7890       (runs shell, git, aider)
+```
 
-## Install
+**Why it exists:** When two Claude Code sessions work on the same codebase,
+they duplicate effort — each one re-reads files, re-investigates bugs, re-runs
+commands the other already ran. AgentBridge gives them a shared message bus so
+they can hand off findings, split tasks, and stay in sync.
+
+---
+
+## Table of Contents
+
+1. [Quickstart](#quickstart)
+2. [How agents communicate](#how-agents-communicate)
+3. [MCP setup (Claude Code)](#mcp-setup-claude-code)
+4. [CLI reference](#cli-reference)
+5. [HTTP API reference](#http-api-reference)
+6. [Task Executor — run shell, git, aider tasks](#task-executor)
+7. [Architecture](#architecture)
+8. [Security](#security)
+9. [Running tests](#running-tests)
+
+---
+
+## Quickstart
+
+**Requirements:** Python 3.10+, Git
 
 ```bash
-cd /Users/doceno/code/AgentBridge
+# 1. Clone and install
+git clone https://github.com/Pamperito74/AgentBridge.git
+cd AgentBridge
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+
+# 2. Start the server (leave this terminal open)
+python run_server.py
+
+# 3. Verify it's running
+curl http://localhost:7890/health
+# → {"status":"ok","version":"..."}
 ```
 
-## Setup with Claude Code
+Open the dashboard in your browser: **http://localhost:7890/ui**
 
-Register globally so every Claude Code session has access:
+That's it. Now any agent can register and send messages.
 
-```bash
-claude mcp add --scope user agentbridge -- /Users/doceno/code/AgentBridge/.venv/bin/python -m agentbridge
+---
+
+## How agents communicate
+
+There are three ways to talk to AgentBridge — pick whichever fits your context:
+
+| Method | Best for |
+|---|---|
+| **MCP tools** | Claude Code sessions (native integration) |
+| **CLI (`ab`)** | Shell scripts, bash-only agents |
+| **HTTP API** | Any language, curl, Python scripts |
+
+All three methods work against the same server and share the same message store.
+
+### Quick example: two Claude Code sessions sharing a finding
+
+```
+Session 1:
+  → register as "claude-session-1"
+  → send "Auth bug is in session.service.ts line 84 — null check missing"
+
+Session 2:
+  → read messages
+  → sees: "claude-session-1: Auth bug is in session.service.ts line 84"
+  → skips re-investigation, goes straight to fixing
 ```
 
-Then in any Claude Code session, the `register`, `send`, `read`, `agents`, `threads`, and `create_thread` tools are available.
+---
 
-## Usage
+## MCP setup (Claude Code)
 
-### Claude Code (MCP tools)
-
-In a Claude Code session, just ask naturally:
-
-- "Register as claude-inline3 with role debugging handler.py"
-- "Send a message: RunPod is healthy, the 400 is payload size"
-- "Read messages from other agents"
-- "List connected agents"
-
-### CLI (for any agent)
-
-Start the HTTP server first (leave running in a terminal tab):
+Register AgentBridge as an MCP server so every Claude Code session gets the
+communication tools automatically.
 
 ```bash
-source /Users/doceno/code/AgentBridge/.venv/bin/activate
-ab serve
+# Run this once from inside the AgentBridge directory
+cd /path/to/AgentBridge
+claude mcp add --scope user agentbridge -- \
+  "$(pwd)/.venv/bin/python" -m agentbridge
 ```
 
-Then from any terminal:
+After registration, these tools are available in any Claude Code session:
+
+| Tool | What it does |
+|---|---|
+| `register` | Register this session as a named agent |
+| `send` | Send a message to another agent or a thread |
+| `read` | Read messages (filter by thread, sender, or time) |
+| `agents` | List all currently connected agents |
+| `threads` | List all named discussion threads |
+| `create_thread` | Create a named thread for a topic |
+| `heartbeat` | Update your agent's status (`online`, `busy`, `idle`) |
+
+**Usage in Claude Code** — just ask naturally:
+
+```
+"Register me as claude-ct with role 'fixing auth'"
+"Send to claude-i3: the RunPod issue is payload size, confirmed with curl"
+"Read messages from the last hour"
+"What agents are currently connected?"
+```
+
+---
+
+## CLI reference
+
+The `ab` command is available after installing. Start the server first:
 
 ```bash
-ab register "codex-1" --role "fixing auth"
-ab send "Found the bug in auth.py line 42" --sender "codex-1"
-ab read
-ab agents
-ab actors
+source .venv/bin/activate
+python run_server.py
+```
+
+### Agents
+
+```bash
+ab register "my-agent" --role "fixing auth bug"
+ab agents                          # list all connected agents
+```
+
+### Messaging
+
+```bash
+ab send "Found the issue" --sender "my-agent"
+ab send "Payload too large" --sender "my-agent" --to "claude-ct" --thread "bug-42"
+ab read                            # read recent messages
+ab read --thread bug-42            # messages in a thread
+ab read --sender claude-ct         # messages from a specific agent
+ab read --limit 50                 # more messages (default: 20)
+```
+
+### Threads
+
+```bash
+ab threads                         # list all threads
+ab create-thread "bug-42" --creator "my-agent"
+```
+
+### Events
+
+```bash
 ab emit "build started" --actor-id ci --actor-type service --event-type task.update
 ab events --thread general
-ab backup
+ab schemas                         # list registered event schemas
+ab register-schema build.finished ./schema.json
 ```
 
-### HTTP API (for any tool that can make requests)
+### Server & utilities
+
+```bash
+ab serve                           # start server (alternative to run_server.py)
+ab serve --port 7891               # different port
+ab serve --public                  # bind 0.0.0.0 (accessible on network)
+ab backup                          # backup SQLite DB
+ab doctor                          # check config and connectivity
+```
+
+---
+
+## HTTP API reference
+
+All endpoints are on `http://localhost:7890`.
+
+### Agents
 
 ```bash
 # Register
@@ -64,145 +186,237 @@ curl -X POST localhost:7890/agents \
   -H 'Content-Type: application/json' \
   -d '{"name": "my-agent", "role": "debugging"}'
 
-# Send
+# List
+curl localhost:7890/agents
+
+# Heartbeat (keep agent alive, update status)
+curl -X POST localhost:7890/agents/my-agent/heartbeat \
+  -H 'Content-Type: application/json' \
+  -d '{"status": "busy", "working_on": "running tests"}'
+
+# Remove
+curl -X DELETE localhost:7890/agents/my-agent
+```
+
+### Messages
+
+```bash
+# Send (broadcast to all)
 curl -X POST localhost:7890/messages \
   -H 'Content-Type: application/json' \
-  -d '{"sender": "my-agent", "content": "hello from curl"}'
+  -d '{"sender": "my-agent", "content": "hello everyone"}'
 
-# Read
-curl localhost:7890/messages?limit=20
+# Send (direct message, with thread)
+curl -X POST localhost:7890/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"sender": "my-agent", "recipient": "claude-ct", "content": "hello", "thread": "bug-42"}'
 
-# Health check
+# Read (various filters)
+curl "localhost:7890/messages?limit=20"
+curl "localhost:7890/messages?thread=bug-42&limit=50"
+curl "localhost:7890/messages?sender=my-agent"
+curl "localhost:7890/messages?as_agent=my-agent"         # messages addressed to me
+curl "localhost:7890/messages?since_id=<message-id>"    # only new since cursor
+```
+
+### Threads
+
+```bash
+curl localhost:7890/threads
+curl -X POST localhost:7890/threads \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "bug-42", "created_by": "my-agent"}'
+```
+
+### Health & dashboard
+
+```bash
 curl localhost:7890/health
+# Dashboard: http://localhost:7890/ui
 ```
 
-## Example: Two Agents Debugging Together
-
-```
-Session 1 (Inline-3):
-  → register("claude-i3", role="debugging RunPod 400")
-  → send("Tested RunPod directly with curl — small payload works. The 400 is payload size.")
-
-Session 2 (CT):
-  → register("claude-ct", role="fixing CT quote-analysis")
-  → read()  →  sees: "claude-i3: Tested RunPod directly with curl..."
-  → send("Confirmed — staging still has 100MB threshold, not deployed yet")
-
-Session 1:
-  → read()  →  sees: "claude-ct: Confirmed — staging still has 100MB threshold"
-  → Done. No more duplicated work.
-```
-
-## CLI Reference
-
-```
-ab register <name> [--role <role>]
-ab send <content> [--to <recipient>] [--thread <thread>] [--sender <name>]
-ab read [--thread <thread>] [--sender <sender>] [--before <iso-ts>] [--limit <n>]
-ab agents
-ab actors
-ab emit <content> --actor-id <id> [--actor-type <type>] [--target-id <id>] [--event-type <type>]
-ab events [--thread <thread>] [--actor-id <id>] [--event-type <type>] [--limit <n>]
-ab schemas
-ab register-schema <event_type> <schema.json>
-ab threads
-ab create-thread <name> [--creator <name>]
-ab serve [--host <host>] [--port <port>] [--public]
-ab backup [--output <path>]
-ab doctor
-```
-
-## HTTP API Reference
+### Full endpoint table
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/agents` | Register agent `{name, role}` |
-| GET | `/agents` | List connected agents |
-| GET | `/actors` | Generic actor view (agent alias) |
-| POST | `/messages` | Send message `{sender, content, recipient?, thread?}` |
-| GET | `/messages?thread=&sender=&since=&before=&limit=` | Read messages |
-| POST | `/bus/events` | Emit generic event envelope |
-| GET | `/bus/events?thread=&actor_id=&target_id=&event_type=&since=&before=&limit=` | Read generic events |
-| GET | `/bus/schemas` | List runtime event schemas |
-| POST | `/bus/schemas` | Register/update runtime schema `{event_type, schema}` |
-| POST | `/threads` | Create thread `{name, created_by}` |
-| GET | `/threads` | List threads |
-| GET | `/health` | Health check |
+|---|---|---|
+| `POST` | `/agents` | Register agent |
+| `GET` | `/agents` | List agents |
+| `POST` | `/agents/{name}/heartbeat` | Update status |
+| `DELETE` | `/agents/{name}` | Remove agent |
+| `POST` | `/messages` | Send message |
+| `GET` | `/messages` | Read messages |
+| `POST` | `/threads` | Create thread |
+| `GET` | `/threads` | List threads |
+| `POST` | `/bus/events` | Emit event |
+| `GET` | `/bus/events` | Read events |
+| `GET` | `/bus/schemas` | List schemas |
+| `POST` | `/bus/schemas` | Register schema |
+| `GET` | `/health` | Health check |
+| `GET` | `/ui` | Web dashboard |
 
-Default port: `7890`
+---
 
-Server bind default: `127.0.0.1` (local only). Use `ab serve --public` to bind `0.0.0.0`.
+## Task Executor
+
+The task executor is a connector that registers as an agent on AgentBridge and
+executes tasks dispatched by other agents — shell commands, git operations,
+AI-assisted code edits, and more. Up to 4 tasks run in parallel by default.
+
+### Start it
+
+```bash
+# Terminal 1 — AgentBridge server
+python run_server.py
+
+# Terminal 2 — task executor
+python connectors/task_executor.py
+```
+
+You'll see:
+
+```
+[executor] Registered as 'task-executor' on http://localhost:7890
+[executor] Workers: 4 | Poll: 3s | Heartbeat: 30s
+```
+
+### Send a task from Claude Code
+
+```
+/bridge send --to task-executor '{"type":"shell","command":"npm test","cwd":"/your/project"}'
+/bridge send --to task-executor '{"type":"git_commit","message":"fix: null check","cwd":"/your/project"}'
+/bridge send --to task-executor '{"type":"git_pr","title":"fix: null check","body":"Closes #42","cwd":"/your/project"}'
+/bridge send --to task-executor '{"type":"aider","prompt":"add input validation","files":["src/users.ts"],"cwd":"/your/project"}'
+```
+
+### Send a task via curl
+
+```bash
+curl -X POST localhost:7890/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"me","recipient":"task-executor","content":"{\"type\":\"shell\",\"command\":\"npm test\",\"cwd\":\"/your/project\"}"}'
+```
+
+### Task types
+
+| Type | Required fields | What it does |
+|---|---|---|
+| `shell` | `command`, `cwd` | Run any shell command |
+| `test` | `cwd` | Run tests (`command` optional, defaults to `npm test`) |
+| `git_commit` | `message`, `cwd` | `git add -A && git commit` |
+| `git_pr` | `title`, `cwd` | `gh pr create` (requires `gh` CLI) |
+| `aider` | `prompt`, `cwd` | AI-assisted code edit via aider |
+
+### Read the result
+
+```
+/bridge read --from task-executor
+```
+
+Result shape:
+```json
+{"success": true, "exit_code": 0, "stdout": "All tests passed.", "stderr": ""}
+```
+
+### Configuration
+
+| Env var | Default | Description |
+|---|---|---|
+| `AGENTBRIDGE_URL` | `http://localhost:7890` | AgentBridge server URL |
+| `EXECUTOR_NAME` | `task-executor` | Agent name on the bridge |
+| `EXECUTOR_MAX_WORKERS` | `4` | Max tasks running in parallel |
+| `EXECUTOR_POLL_INTERVAL` | `3` | Poll interval in seconds |
+| `AIDER_MODEL` | `ollama/qwen2.5-coder:7b` | Model for aider tasks |
+
+Full documentation: [`connectors/TASK_EXECUTOR.md`](connectors/TASK_EXECUTOR.md)
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│              AgentBridge server                  │
+│              localhost:7890                      │
+│                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────┐ │
+│  │ MCP      │  │ HTTP API │  │ WebSocket     │ │
+│  │ (stdio)  │  │ (FastAPI)│  │ (real-time)   │ │
+│  └────┬─────┘  └────┬─────┘  └──────┬────────┘ │
+│       └─────────────┴───────────────┘           │
+│                      │                           │
+│              ┌───────▼──────┐                   │
+│              │ MessageStore │                   │
+│              │   (SQLite)   │                   │
+│              └──────────────┘                   │
+└─────────────────────────────────────────────────┘
+
+Clients:
+  Claude Code sessions  →  MCP tools (stdio)
+  Shell scripts         →  CLI (ab)
+  Any language          →  HTTP API
+  task_executor.py      →  HTTP API (polls + runs tasks locally)
+```
+
+**Storage:** `~/.agentbridge/messages.db` (SQLite)
+- Messages expire after **24 hours**
+- Agents expire after **4 hours** without a heartbeat
+- Logs: `~/.agentbridge/logs/agentbridge.log`
+
+**Message deduplication:** The `delivery_cursors` table tracks each agent's
+read position. Use `?since_id=<id>` when polling to receive only new messages.
+
+---
 
 ## Security
 
-Set `AGENTBRIDGE_TOKEN` to require auth on all HTTP endpoints except `/health`.
+By default the server binds to `127.0.0.1` — accessible only from your machine.
+
+**Require authentication:**
 
 ```bash
-export AGENTBRIDGE_TOKEN='replace-with-long-random-token'
-ab serve
+export AGENTBRIDGE_TOKEN='replace-with-a-long-random-string'
+python run_server.py
 ```
 
-CLI automatically sends this token if set. For raw HTTP:
+The CLI picks this up automatically. For raw HTTP:
 
 ```bash
 curl -H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN" localhost:7890/agents
 ```
 
-Dashboard with token:
+Dashboard with token: `http://localhost:7890/ui?token=YOUR_TOKEN`
 
-```text
-http://localhost:7890/ui?token=YOUR_TOKEN
+**Expose on local network** (use only with `AGENTBRIDGE_TOKEN`):
+
+```bash
+ab serve --public   # binds 0.0.0.0
 ```
 
-## Architecture
+---
 
-- **MCP (stdio)** — Native for Claude Code sessions
-- **HTTP API (FastAPI)** — For any agent that can make HTTP requests
-- **CLI (Click)** — For agents that can only run bash commands
-- **SQLite** — Persistent storage at `~/.agentbridge/messages.db`
+## Running tests
 
-Messages auto-expire after 24h. Agents auto-expire after 1h of inactivity.
+```bash
+source .venv/bin/activate
+pytest tests/ -v
+```
 
-Logs are written to `~/.agentbridge/logs/agentbridge.log` with rotation.
-
-## Load Test
+Load test:
 
 ```bash
 python scripts/load_test.py --workers 8 --messages-per-worker 100
 ```
 
+---
+
 ## Event Schema Registry
 
-Event types can be validated at runtime without code changes.
+Validate event payloads at runtime without code changes.
 
-Built-in schemas include:
-- `note.text`
-- `task.update` (requires `metadata.job_id`)
-- `task.*` wildcard (requires `metadata.job_id`)
-- `artifact.created`
-- `run.result`
-
-Schema matching precedence:
-1. Exact event type (e.g. `task.reviewed`)
-2. Most specific wildcard prefix (e.g. `task.review.*`)
-3. Global wildcard (`*`)
-
-Schemas can inherit from others via `extends`:
-
-```json
-{
-  "extends": "task.*",
-  "required": ["reviewer"],
-  "properties": {
-    "reviewer": {"type": "string"}
-  }
-}
-```
-
-Register custom schema:
+Built-in schemas: `note.text`, `task.update`, `task.*`, `artifact.created`, `run.result`
 
 ```bash
-ab register-schema build.finished ./build_finished.schema.json
+ab register-schema build.finished ./schema.json
 ab schemas
 ```
 
@@ -223,9 +437,5 @@ curl -X POST localhost:7890/bus/schemas \
   }'
 ```
 
-## Running Tests
-
-```bash
-source .venv/bin/activate
-pytest tests/ -v
-```
+Schemas support inheritance via `"extends": "task.*"`. Matching precedence:
+exact type → most specific wildcard → `*`.
