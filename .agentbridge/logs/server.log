@@ -1,0 +1,852 @@
+INFO:     Started server process [95703]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('127.0.0.1', 7890): [errno 48] address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+Starting AgentBridge on 127.0.0.1:7890
+Dashboard: http://localhost:7890/ui
+INFO:     Started server process [56716]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:7890 (Press CTRL+C to quit)
+Starting AgentBridge on 127.0.0.1:7890
+Dashboard: http://localhost:7890/ui
+INFO:     Started server process [56847]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('127.0.0.1', 7890): [errno 48] address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+GET /health 200 1ms
+INFO:     127.0.0.1:60810 - "GET /health HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:61723 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61726 - "GET /messages?thread=db-latency&limit=20 HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:61897 - "GET /health HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61902 - "GET /ui HTTP/1.1" 200 OK
+GET /threads 200 3ms
+INFO:     127.0.0.1:61902 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 4ms
+INFO:     127.0.0.1:61904 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /agents 200 4ms
+INFO:     127.0.0.1:61905 - "GET /agents HTTP/1.1" 200 OK
+GET /events 200 1ms
+INFO:     127.0.0.1:61905 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61904 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:61904 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 3ms
+INFO:     127.0.0.1:61902 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:61906 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61906 - "GET /events HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61923 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61925 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61929 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61931 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:61934 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:61934 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:61935 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:61936 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61936 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61935 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 3ms
+INFO:     127.0.0.1:61935 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 4ms
+INFO:     127.0.0.1:61934 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61937 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61937 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61934 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:61934 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 4ms
+INFO:     127.0.0.1:61935 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61938 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61938 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:61935 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:61935 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 3ms
+INFO:     127.0.0.1:61934 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61939 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61939 - "GET /events HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61942 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61944 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61951 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61953 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61956 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61958 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:61960 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61962 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61964 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:61964 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:61965 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61966 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61966 - "GET /events HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:61968 - "GET /health HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61985 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:61985 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:61986 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61987 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61987 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61986 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:61986 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:61985 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:61989 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:61989 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:61985 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:61985 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 3ms
+INFO:     127.0.0.1:61986 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:61990 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 1ms
+INFO:     127.0.0.1:61990 - "GET /events HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:61999 - "POST /agents HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:62008 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:62009 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:62012 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:62012 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:62013 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:62014 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62014 - "GET /events HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:62021 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 3ms
+INFO:     127.0.0.1:62024 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 3ms
+INFO:     127.0.0.1:62027 - "POST /messages HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:62191 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62193 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:62239 - "POST /agents HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:62253 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62259 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+POST /agents 200 0ms
+INFO:     127.0.0.1:62261 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62264 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62277 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:62279 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:62279 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:62281 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:62282 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62282 - "GET /events HTTP/1.1" 200 OK
+POST /agents/green/heartbeat 200 0ms
+INFO:     127.0.0.1:62287 - "POST /agents/green/heartbeat HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62289 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62296 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62298 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62330 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:62365 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:62365 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 3ms
+INFO:     127.0.0.1:62366 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 4ms
+INFO:     127.0.0.1:62367 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62367 - "GET /events HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:62435 - "POST /messages HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [56716]
+Starting AgentBridge on 127.0.0.1:7890
+Dashboard: http://localhost:7890/ui
+INFO:     Started server process [70218]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:7890 (Press CTRL+C to quit)
+GET /ui 200 1ms
+INFO:     127.0.0.1:62443 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:62443 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:62444 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:62444 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62444 - "GET /events HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:62448 - "GET /health HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:62484 - "GET /messages?limit=100&thread=general HTTP/1.1" 200 OK
+DELETE /agents/Slave-1 200 1ms
+INFO:     127.0.0.1:62486 - "DELETE /agents/Slave-1 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62499 - "GET /messages?limit=100&thread=runpod-debug HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62499 - "GET /messages?limit=100&thread=general HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62499 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70218]
+Starting AgentBridge on 127.0.0.1:7890
+Dashboard: http://localhost:7890/ui
+INFO:     Started server process [71636]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:7890 (Press CTRL+C to quit)
+GET /health 200 0ms
+INFO:     127.0.0.1:62517 - "GET /health HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:62557 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:62557 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:62560 - "GET /threads HTTP/1.1" 200 OK
+GET /favicon.ico 404 0ms
+INFO:     127.0.0.1:62560 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+GET /messages 200 1ms
+INFO:     127.0.0.1:62557 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62557 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:62560 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:62560 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:62563 - "GET /threads HTTP/1.1" 200 OK
+GET /favicon.ico 404 0ms
+INFO:     127.0.0.1:62560 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+GET /messages 200 1ms
+INFO:     127.0.0.1:62563 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62563 - "GET /events HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62579 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62588 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:62591 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62593 - "GET /messages?thread=hardening&limit=10 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:62596 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62600 - "GET /messages?limit=20&thread=hardening HTTP/1.1" 200 OK
+GET /threads 200 0ms
+INFO:     127.0.0.1:62602 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62607 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62609 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62616 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62626 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 422 0ms
+INFO:     127.0.0.1:62630 - "POST /messages HTTP/1.1" 422 Unprocessable Content
+POST /messages 200 1ms
+INFO:     127.0.0.1:62634 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:62640 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:62653 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:62653 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:62655 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:62655 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62655 - "GET /events HTTP/1.1" 200 OK
+POST /messages 200 12ms
+INFO:     127.0.0.1:62724 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62971 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63042 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63047 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63090 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63107 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64760 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:64762 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64767 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:64773 - "GET /messages?limit=8 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:64777 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:64807 - "GET /messages?limit=6 HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:64836 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64840 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 5ms
+INFO:     127.0.0.1:65282 - "POST /messages HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:52197 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52198 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52200 - "GET /messages?thread=general&limit=10 HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:52203 - "POST /agents HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52205 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:52207 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:52210 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:52210 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:52212 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 4ms
+INFO:     127.0.0.1:52212 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52212 - "GET /events HTTP/1.1" 200 OK
+DELETE /agents/gray-2 200 3ms
+INFO:     127.0.0.1:52210 - "DELETE /agents/gray-2 HTTP/1.1" 200 OK
+DELETE /agents/green 200 2ms
+INFO:     127.0.0.1:52210 - "DELETE /agents/green HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:52210 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:52210 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 2ms
+INFO:     127.0.0.1:52213 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 3ms
+INFO:     127.0.0.1:52213 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52213 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:52210 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52210 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 0ms
+INFO:     127.0.0.1:52215 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52215 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52215 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:52210 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:52210 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:52216 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52216 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52216 - "GET /events HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52221 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:52223 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:52226 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:52226 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:52227 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 4ms
+INFO:     127.0.0.1:52227 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52227 - "GET /events HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:52229 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52230 - "GET /agents HTTP/1.1" 200 OK
+POST /agents 200 0ms
+INFO:     127.0.0.1:52233 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52234 - "GET /messages?limit=100&thread=general HTTP/1.1" 200 OK
+GET /messages 200 4ms
+INFO:     127.0.0.1:52234 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52245 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52246 - "GET /messages?limit=100&thread=general HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52246 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52254 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52256 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52263 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:52279 - "GET /health HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:52283 - "POST /messages HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:52384 - "GET /events HTTP/1.1" 200 OK
+GET /threads 200 0ms
+INFO:     127.0.0.1:52519 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52521 - "GET /messages?limit=50 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:52528 - "GET /agents HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:52529 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:52530 - "GET /messages?thread=general&limit=20 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52532 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52533 - "GET /messages?thread=general&limit=25 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52546 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 19ms
+INFO:     127.0.0.1:52594 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52605 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52608 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52611 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52616 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52619 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 2ms
+INFO:     127.0.0.1:52621 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52625 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52630 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52636 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:52651 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52659 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:52742 - "GET /messages?thread=general&limit=30 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:52744 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:52756 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:61430 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:61784 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:61855 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:61919 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:62954 - "GET /health HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:62955 - "GET /messages?thread=general&limit=20 HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:62956 - "GET /agents HTTP/1.1" 200 OK
+POST /agents 200 0ms
+INFO:     127.0.0.1:62957 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62959 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:62964 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62968 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62969 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 2ms
+INFO:     127.0.0.1:62980 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:62980 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:62982 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 5ms
+INFO:     127.0.0.1:62982 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:62982 - "GET /events HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:62988 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:62992 - "GET /messages?limit=30 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62994 - "GET /messages?thread=general&limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63000 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63042 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63089 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:63092 - "GET /messages?thread=general&limit=8 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:63105 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 18ms
+INFO:     127.0.0.1:63331 - "GET /messages?thread=general&limit=12 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63709 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:49464 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:49468 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:49533 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50448 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:50455 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:50456 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:50458 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50465 - "GET /messages?limit=3 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50473 - "GET /messages?thread=general&limit=8 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:50479 - "POST /messages HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:50484 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:50485 - "GET /agents HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:50500 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:50501 - "GET /agents HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:50924 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50929 - "GET /messages?limit=3 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50932 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:50935 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:50936 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50938 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50941 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50943 - "GET /messages?limit=15 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50945 - "GET /messages?limit=15 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50947 - "GET /messages?limit=3&thread=hardening HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:50950 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:50953 - "GET /messages?limit=1 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:50955 - "GET /messages?limit=25 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:50958 - "GET /messages?limit=25 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:51192 - "POST /messages HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:51210 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:51211 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51217 - "GET /messages?thread=general&limit=5 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:51415 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:51420 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51481 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:51485 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:51489 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:51489 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:51490 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 6ms
+INFO:     127.0.0.1:51490 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:51490 - "GET /events HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:51496 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:51497 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51611 - "GET /messages?limit=3 HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:51616 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51621 - "GET /messages?limit=3&sender=codex-cirrustranslate HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:51623 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:51629 - "POST /messages HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:51714 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:51714 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:51715 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 6ms
+INFO:     127.0.0.1:51715 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:51715 - "GET /events HTTP/1.1" 200 OK
+GET /ui 200 1ms
+INFO:     127.0.0.1:51714 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 2ms
+INFO:     127.0.0.1:51714 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:51716 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 8ms
+INFO:     127.0.0.1:51716 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:51716 - "GET /events HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:51718 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51720 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /ui 200 0ms
+INFO:     127.0.0.1:51728 - "GET /ui HTTP/1.1" 200 OK
+GET /agents 200 1ms
+INFO:     127.0.0.1:51728 - "GET /agents HTTP/1.1" 200 OK
+GET /threads 200 1ms
+INFO:     127.0.0.1:51729 - "GET /threads HTTP/1.1" 200 OK
+GET /messages 200 7ms
+INFO:     127.0.0.1:51729 - "GET /messages?limit=100 HTTP/1.1" 200 OK
+GET /events 200 0ms
+INFO:     127.0.0.1:51729 - "GET /events HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:51733 - "POST /agents HTTP/1.1" 200 OK
+DELETE /agents/claude-ct 200 3ms
+INFO:     127.0.0.1:51736 - "DELETE /agents/claude-ct HTTP/1.1" 200 OK
+POST /messages 422 0ms
+INFO:     127.0.0.1:51742 - "POST /messages HTTP/1.1" 422 Unprocessable Content
+POST /messages 422 0ms
+INFO:     127.0.0.1:51745 - "POST /messages HTTP/1.1" 422 Unprocessable Content
+POST /messages 200 0ms
+INFO:     127.0.0.1:51747 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 6ms
+INFO:     127.0.0.1:51749 - "GET /messages?thread=general&limit=10 HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:51765 - "GET /health HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:51774 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:51775 - "GET /agents HTTP/1.1" 200 OK
+POST /agents 200 0ms
+INFO:     127.0.0.1:51776 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51777 - "GET /messages?thread=general&limit=8 HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:51778 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:51785 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:51788 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:51891 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:51945 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:52317 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:53131 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:54226 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:54303 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:54541 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:54603 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:54608 - "GET /messages?limit=3 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:54613 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:56420 - "POST /messages HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:58796 - "POST /agents HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:58942 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:58946 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:58949 - "GET /messages?limit=3&sender=codex-cirrustranslate HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:58955 - "GET /messages?thread=general&limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:58958 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:59014 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:59017 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:59024 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:59075 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:59186 - "GET /messages?limit=8 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:59221 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:59233 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:59871 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:60029 - "GET /messages?limit=20 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:60053 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 2ms
+INFO:     127.0.0.1:61167 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:61169 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:61341 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:61396 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61403 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61421 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:61425 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:61469 - "GET /messages?limit=8 HTTP/1.1" 200 OK
+POST /messages 422 0ms
+INFO:     127.0.0.1:61471 - "POST /messages HTTP/1.1" 422 Unprocessable Content
+POST /messages 200 1ms
+INFO:     127.0.0.1:61474 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 0ms
+INFO:     127.0.0.1:62515 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62555 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:62558 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62700 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62890 - "GET /messages?limit=10 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:62924 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63176 - "POST /messages HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:63193 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63201 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63375 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63613 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63615 - "POST /messages HTTP/1.1" 200 OK
+GET /events 200 1ms
+INFO:     127.0.0.1:63844 - "GET /events HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:63973 - "POST /messages HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:64030 - "GET /health HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:64031 - "GET /agents HTTP/1.1" 200 OK
+GET /health 200 0ms
+INFO:     127.0.0.1:64037 - "GET /health HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:64038 - "POST /agents HTTP/1.1" 200 OK
+POST /agents 200 1ms
+INFO:     127.0.0.1:64041 - "POST /agents HTTP/1.1" 200 OK
+GET /messages 200 1ms
+INFO:     127.0.0.1:64042 - "GET /messages?thread=general&limit=20 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64044 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64106 - "POST /messages HTTP/1.1" 200 OK
+GET /agents 200 0ms
+INFO:     127.0.0.1:64144 - "GET /agents HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:64146 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+GET /messages 200 0ms
+INFO:     127.0.0.1:64152 - "GET /messages?limit=5 HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64154 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 4ms
+INFO:     127.0.0.1:64289 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 5ms
+INFO:     127.0.0.1:64328 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64400 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64495 - "POST /messages HTTP/1.1" 200 OK
+POST /messages 200 1ms
+INFO:     127.0.0.1:64600 - "POST /messages HTTP/1.1" 200 OK

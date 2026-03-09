@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 import json
 import threading
@@ -73,6 +74,14 @@ class MessageStore:
                     created_by TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+               CREATE TABLE IF NOT EXISTS delivery_cursors (
+                   agent_name TEXT NOT NULL,
+                   thread TEXT NOT NULL DEFAULT 'general',
+                   last_message_id TEXT,
+                   last_timestamp TEXT,
+                   updated_at TEXT NOT NULL,
+                   PRIMARY KEY (agent_name, thread)
+               );
             """)
             self._conn.commit()
 
@@ -93,6 +102,8 @@ class MessageStore:
                     ON messages(recipient, timestamp);
                 CREATE INDEX IF NOT EXISTS idx_messages_correlation_id
                     ON messages(correlation_id);
+                CREATE INDEX IF NOT EXISTS idx_delivery_cursors_agent_thread
+                    ON delivery_cursors(agent_name, thread);
             """)
             self._conn.commit()
 
@@ -135,6 +146,88 @@ class MessageStore:
             agent_cutoff = (datetime.now(timezone.utc) - timedelta(hours=AGENT_TTL_HOURS)).isoformat()
             self._conn.execute("DELETE FROM agents WHERE last_seen < ?", (agent_cutoff,))
             self._conn.commit()
+        return None
+
+    async def _run_in_thread(self, func, *args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    async def register_agent_async(self, name: str, role: str = "", capabilities: list[str] | None = None) -> Agent:
+        return await self._run_in_thread(self.register_agent, name, role, capabilities)
+
+    async def list_agents_async(self) -> list[Agent]:
+        return await self._run_in_thread(self.list_agents)
+
+    async def heartbeat_async(self, name: str, status: str = "online", working_on: str = "") -> Agent | None:
+        return await self._run_in_thread(self.heartbeat, name, status, working_on)
+
+    async def add_message_async(
+        self, sender: str, content: str,
+        recipient: str | None = None,
+        thread: str = "general", msg_type: str = "chat",
+        artifacts: list[dict] | None = None,
+        actor_id: str | None = None, actor_type: str = "agent",
+        target_id: str | None = None, target_type: str | None = None,
+        event_type: str = "note.text", metadata: dict | None = None,
+        labels: list[str] | None = None,
+        correlation_id: str | None = None,
+    ) -> Message:
+        return await self._run_in_thread(
+            self.add_message,
+            sender, content, recipient, thread, msg_type, artifacts, actor_id, actor_type,
+            target_id, target_type, event_type, metadata, labels, correlation_id,
+        )
+
+    async def read_messages_async(
+        self, thread: str | None = None, since: str | None = None,
+        limit: int = 50, sender: str | None = None, as_agent: str | None = None,
+        before: str | None = None,
+        actor_id: str | None = None, event_type: str | None = None,
+        target_id: str | None = None,
+        correlation_id: str | None = None,
+        since_id: str | None = None,
+    ) -> list[Message]:
+        return await self._run_in_thread(
+            self.read_messages,
+            thread, since, limit, sender, as_agent, before, actor_id, event_type, target_id, correlation_id, since_id,
+        )
+
+    async def message_timestamp_async(self, message_id: str) -> str | None:
+        return await self._run_in_thread(self.message_timestamp, message_id)
+
+    async def set_delivery_cursor_async(
+        self,
+        agent_name: str,
+        thread: str,
+        last_message_id: str,
+        last_timestamp: str,
+    ):
+        await self._run_in_thread(
+            self.set_delivery_cursor,
+            agent_name, thread, last_message_id, last_timestamp,
+        )
+
+    async def get_delivery_cursor_async(self, agent_name: str, thread: str = "general") -> dict | None:
+        return await self._run_in_thread(self.get_delivery_cursor, agent_name, thread)
+
+    async def list_delivery_cursors_async(self, agent_name: str | None = None) -> list[dict]:
+        return await self._run_in_thread(self.list_delivery_cursors, agent_name)
+
+    async def create_thread_async(self, name: str, created_by: str) -> Thread:
+        return await self._run_in_thread(self.create_thread, name, created_by)
+
+    async def list_threads_async(self) -> list[Thread]:
+        return await self._run_in_thread(self.list_threads)
+
+    async def thread_summary_async(self, name: str) -> ThreadSummary:
+        return await self._run_in_thread(self.thread_summary, name)
+
+    def remove_agent(self, name: str):
+        with self._lock:
+            self._conn.execute("DELETE FROM agents WHERE name = ?", (name,))
+            self._conn.commit()
+
+    async def remove_agent_async(self, name: str):
+        await self._run_in_thread(self.remove_agent, name)
 
     # --- Agents ---
 
@@ -239,6 +332,7 @@ class MessageStore:
         actor_id: str | None = None, event_type: str | None = None,
         target_id: str | None = None,
         correlation_id: str | None = None,
+        since_id: str | None = None,
     ) -> list[Message]:
         def _normalize_ts(value: str) -> str:
             try:
@@ -270,6 +364,11 @@ class MessageStore:
         if since:
             query += " AND timestamp > ?"
             params.append(_normalize_ts(since))
+        elif since_id:
+            ts = self.message_timestamp(since_id)
+            if ts:
+                query += " AND timestamp > ?"
+                params.append(ts)
         if before:
             query += " AND timestamp < ?"
             params.append(_normalize_ts(before))
@@ -295,6 +394,71 @@ class MessageStore:
                 timestamp=datetime.fromisoformat(r[16]),
             )
             for r in reversed(rows)
+        ]
+
+    def message_timestamp(self, message_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT timestamp FROM messages WHERE id = ?", (message_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def set_delivery_cursor(
+        self,
+        agent_name: str,
+        thread: str,
+        last_message_id: str,
+        last_timestamp: str,
+    ):
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO delivery_cursors (agent_name, thread, last_message_id, last_timestamp, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(agent_name, thread) DO UPDATE SET
+                    last_message_id = excluded.last_message_id,
+                    last_timestamp = excluded.last_timestamp,
+                    updated_at = excluded.updated_at
+                """,
+                (agent_name, thread, last_message_id, last_timestamp, updated_at),
+            )
+            self._conn.commit()
+
+    def get_delivery_cursor(self, agent_name: str, thread: str = "general") -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT last_message_id, last_timestamp, updated_at FROM delivery_cursors WHERE agent_name = ? AND thread = ?",
+                (agent_name, thread),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "agent_name": agent_name,
+            "thread": thread,
+            "last_message_id": row[0],
+            "last_timestamp": row[1],
+            "updated_at": row[2],
+        }
+
+    def list_delivery_cursors(self, agent_name: str | None = None) -> list[dict]:
+        query = "SELECT agent_name, thread, last_message_id, last_timestamp, updated_at FROM delivery_cursors"
+        params: list = []
+        if agent_name:
+            query += " WHERE agent_name = ?"
+            params.append(agent_name)
+        query += " ORDER BY updated_at DESC"
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [
+            {
+                "agent_name": r[0],
+                "thread": r[1],
+                "last_message_id": r[2],
+                "last_timestamp": r[3],
+                "updated_at": r[4],
+            }
+            for r in rows
         ]
 
     def backup_to(self, output_path: str | Path) -> Path:

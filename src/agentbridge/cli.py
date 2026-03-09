@@ -109,8 +109,12 @@ def send(content: str, recipient: str | None, thread: str, sender: str, msg_type
 @click.option("--sender", "-s", default=None, help="Filter by sender")
 @click.option("--inbox", "-i", default=None, help="Show only messages to this agent (inbox mode)")
 @click.option("--before", default=None, help="Only messages before this ISO timestamp (pagination)")
+@click.option("--since-id", default=None, help="Only messages after this message ID")
+@click.option("--cursor-agent", default=None, help="Agent name to store cursor under (--save-cursor required)")
+@click.option("--cursor-thread", default=None, help="Thread name when storing cursor; falls back to --thread or message thread")
+@click.option("--save-cursor/--no-save-cursor", default=False, help="Persist cursor after reading (requires --cursor-agent)")
 @click.option("--limit", "-n", default=20, help="Number of messages")
-def read(thread: str | None, sender: str | None, inbox: str | None, before: str | None, limit: int):
+def read(thread: str | None, sender: str | None, inbox: str | None, before: str | None, since_id: str | None, cursor_agent: str | None, cursor_thread: str | None, save_cursor: bool, limit: int):
     """Read recent messages. Use --inbox NAME to see only your messages."""
     params = {"limit": limit}
     if thread:
@@ -121,6 +125,8 @@ def read(thread: str | None, sender: str | None, inbox: str | None, before: str 
         params["as_agent"] = inbox
     if before:
         params["before"] = before
+    if since_id:
+        params["since_id"] = since_id
     messages = _get("/messages", params)
     if not messages:
         click.echo("No messages.")
@@ -131,6 +137,60 @@ def read(thread: str | None, sender: str | None, inbox: str | None, before: str 
         type_tag = f"[{msg.get('msg_type', 'chat')}] " if msg.get("msg_type", "chat") != "chat" else ""
         artifacts = f" [{len(msg.get('artifacts', []))} artifacts]" if msg.get("artifacts") else ""
         click.echo(f"{type_tag}{prefix}{msg['sender']}{to}: {msg['content']}{artifacts}")
+    if save_cursor:
+        if not cursor_agent:
+            click.echo("Cannot save cursor: --cursor-agent is required when --save-cursor is set.", err=True)
+            raise click.exceptions.Exit(1)
+        last_msg = messages[-1]
+        target_thread = cursor_thread or thread or last_msg.get("thread") or "general"
+        payload = {
+            "agent_name": cursor_agent,
+            "thread": target_thread,
+            "last_message_id": last_msg["id"],
+        }
+        ts = last_msg.get("timestamp")
+        if ts:
+            payload["last_timestamp"] = ts
+        _post("/cursors", payload)
+        click.echo(f"Cursor saved for {cursor_agent} on thread {target_thread}.")
+
+
+@cli.group()
+def cursor():
+    """Manage persisted delivery cursors."""
+    pass
+
+
+@cursor.command("list")
+@click.option("--agent", default=None, help="Only list cursors for this agent")
+def cursor_list(agent: str | None):
+    params = {"agent": agent} if agent else None
+    result = _get("/cursors", params)
+    if not result:
+        click.echo("No saved cursors.")
+        return
+    for cursor in result:
+        thread = cursor.get("thread", "general")
+        msg_id = cursor.get("last_message_id") or "<none>"
+        ts = cursor.get("last_timestamp") or "-"
+        click.echo(f"{cursor['agent_name']}#{thread}: last={msg_id} @ {ts}")
+
+
+@cursor.command("set")
+@click.argument("agent")
+@click.argument("message_id")
+@click.option("--thread", "-t", default="general", help="Thread name")
+@click.option("--timestamp", "-ts", default=None, help="Optional ISO timestamp")
+def cursor_set(agent: str, message_id: str, thread: str, timestamp: str | None):
+    payload = {
+        "agent_name": agent,
+        "thread": thread,
+        "last_message_id": message_id,
+    }
+    if timestamp:
+        payload["last_timestamp"] = timestamp
+    _post("/cursors", payload)
+    click.echo(f"Cursor stored for {agent} on thread {thread}.")
 
 
 @cli.command()
@@ -237,8 +297,9 @@ def emit(content: str, actor_id: str, actor_type: str, target_id: str | None, ta
 @click.option("--target-id", default=None, help="Filter by target")
 @click.option("--event-type", default=None, help="Filter by event type")
 @click.option("--before", default=None, help="Only events before this ISO timestamp")
+@click.option("--since-id", default=None, help="Only events after this message ID")
 @click.option("--limit", "-n", default=20, help="Number of events")
-def events(thread: str | None, actor_id: str | None, target_id: str | None, event_type: str | None, before: str | None, limit: int):
+def events(thread: str | None, actor_id: str | None, target_id: str | None, event_type: str | None, before: str | None, since_id: str | None, limit: int):
     """Read generic bus events."""
     params = {"limit": limit}
     if thread:
@@ -251,6 +312,10 @@ def events(thread: str | None, actor_id: str | None, target_id: str | None, even
         params["event_type"] = event_type
     if before:
         params["before"] = before
+    if since_id:
+        params["since_id"] = since_id
+    if since_id:
+        params["since_id"] = since_id
     result = _get("/bus/events", params)
     if not result:
         click.echo("No events.")
