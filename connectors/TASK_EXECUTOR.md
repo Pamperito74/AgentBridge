@@ -85,7 +85,13 @@ most setups — only change what you need.
 | `AGENTBRIDGE_URL` | `http://localhost:7890` | AgentBridge server URL |
 | `EXECUTOR_NAME` | `task-executor` | Name this agent registers under |
 | `EXECUTOR_POLL_INTERVAL` | `3` | How often (seconds) to check for new tasks |
+| `EXECUTOR_MAX_WORKERS` | `4` | Max tasks that can run in parallel |
 | `AIDER_MODEL` | `ollama/qwen2.5-coder:7b` | Model used for `aider` task type |
+
+`EXECUTOR_MAX_WORKERS` controls the thread pool size. With the default of 4,
+up to 4 tasks run simultaneously — a 120s shell command no longer blocks 3
+other tasks from starting. Set it lower (`1`) for strict sequential execution
+or higher if your machine can handle more concurrent work.
 
 Example — run two executors on different projects simultaneously:
 
