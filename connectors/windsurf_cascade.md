@@ -81,7 +81,7 @@ From any Claude Code session:
 
 ## Full workflow example
 
-**Terminal 1:** AgentBridge running (`python run_server.py`)
+**Terminal 1:** AgentBridge running (`python start.py`)
 **Windsurf:** Cascade active with the activation prompt above
 **Claude Code:** Planner session
 

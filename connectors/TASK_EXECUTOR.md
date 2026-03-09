@@ -37,7 +37,7 @@ The executor:
 
 ## Prerequisites
 
-- AgentBridge installed and running (`python run_server.py`)
+- AgentBridge installed and running (`python start.py`)
 - Python 3.10+ with the `requests` package available
 - For `git_commit` / `git_pr` tasks: `git` and `gh` CLI installed and authenticated
 - For `aider` tasks: `aider` installed (`pipx install aider-chat`)
@@ -47,32 +47,22 @@ The executor:
 
 ## How to run
 
-**Step 1 — Start AgentBridge** (if not already running):
-
 ```bash
 cd ~/code/TheDarkFactory/AgentBridge
 source .venv/bin/activate
-python run_server.py
-```
-
-**Step 2 — Start the executor** in a separate terminal:
-
-```bash
-cd ~/code/TheDarkFactory/AgentBridge
-source .venv/bin/activate
-python connectors/task_executor.py
+python start.py
 ```
 
 You should see:
 
 ```
+[launcher] Server is ready at http://127.0.0.1:7890
 [executor] Registered as 'task-executor' on http://localhost:7890
-[executor] Polling every 3s — send tasks via AgentBridge to 'task-executor'
-[executor] Heartbeat every 30s
+[executor] Workers: 4 | Poll: 3s | Heartbeat: 30s
 [executor] Ctrl-C to stop
 ```
 
-That's it. The executor is now live and waiting for tasks.
+That's it — server and executor running in one process. Ctrl-C stops both.
 
 ---
 
@@ -337,10 +327,9 @@ Four terminals. This is the full setup for two Claude Code agents coordinating
 through the executor.
 
 ```
-Terminal 1  →  python run_server.py                  # AgentBridge hub
-Terminal 2  →  python connectors/task_executor.py    # executor
-Terminal 3  →  claude   (Session 1 — Planner)
-Terminal 4  →  claude   (Session 2 — Implementer)
+Terminal 1  →  python start.py                       # AgentBridge + executor
+Terminal 2  →  claude   (Session 1 — Planner)
+Terminal 3  →  claude   (Session 2 — Implementer)
 ```
 
 **Planner (Session 1) posts a task to a shared thread:**
@@ -378,7 +367,7 @@ Terminal 4  →  claude   (Session 2 — Implementer)
 ## Troubleshooting
 
 **"could not register — is AgentBridge running?"**
-Start AgentBridge first: `python run_server.py`. Verify with `curl http://localhost:7890/health`.
+Start AgentBridge first: `python start.py`. Verify with `curl http://localhost:7890/health`.
 
 **Tasks sent but no reply appears**
 Check the executor terminal for error output. Make sure `cwd` exists and the
@@ -401,9 +390,8 @@ Install with pipx and Python 3.12: `pipx install aider-chat --python python3.12`
 ## Quick reference
 
 ```bash
-# Start everything
-python run_server.py &                    # AgentBridge
-python connectors/task_executor.py &      # executor
+# Start everything (server + executor in one command)
+python start.py
 
 # Verify executor is registered
 curl http://localhost:7890/agents | python3 -m json.tool

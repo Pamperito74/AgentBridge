@@ -11,8 +11,8 @@ Registers as an agent on AgentBridge and executes tasks dispatched by any other 
 ### Start
 
 ```bash
-# From the AgentBridge root (server must already be running)
-python connectors/task_executor.py
+# From the AgentBridge root — starts server + executor together
+python start.py
 ```
 
 Optional environment variables:
@@ -121,10 +121,9 @@ On failure:
 ## Multi-Agent Workflow Example
 
 ```
-Terminal 1: python run_server.py             # AgentBridge hub
-Terminal 2: python connectors/task_executor.py  # executor agent
-Terminal 3: claude (Session 1 — Planner)
-Terminal 4: claude (Session 2 — Implementer)
+Terminal 1: python start.py                  # AgentBridge + executor
+Terminal 2: claude (Session 1 — Planner)
+Terminal 3: claude (Session 2 — Implementer)
 ```
 
 **Planner posts a task:**

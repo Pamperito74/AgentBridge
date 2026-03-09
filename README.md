@@ -43,8 +43,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 2. Start the server (leave this terminal open)
-python run_server.py
+# 2. Start everything (server + task executor) in one command
+python start.py
 
 # 3. Verify it's running
 curl http://localhost:7890/health
@@ -121,11 +121,11 @@ After registration, these tools are available in any Claude Code session:
 
 ## CLI reference
 
-The `ab` command is available after installing. Start the server first:
+The `ab` command is available after installing. Start AgentBridge first:
 
 ```bash
 source .venv/bin/activate
-python run_server.py
+python start.py
 ```
 
 ### Agents
@@ -165,7 +165,7 @@ ab register-schema build.finished ./schema.json
 ### Server & utilities
 
 ```bash
-ab serve                           # start server (alternative to run_server.py)
+ab serve                           # start server only (no executor)
 ab serve --port 7891               # different port
 ab serve --public                  # bind 0.0.0.0 (accessible on network)
 ab backup                          # backup SQLite DB
@@ -265,16 +265,13 @@ AI-assisted code edits, and more. Up to 4 tasks run in parallel by default.
 ### Start it
 
 ```bash
-# Terminal 1 — AgentBridge server
-python run_server.py
-
-# Terminal 2 — task executor
-python connectors/task_executor.py
+python start.py
 ```
 
 You'll see:
 
 ```
+[launcher] Server is ready at http://127.0.0.1:7890
 [executor] Registered as 'task-executor' on http://localhost:7890
 [executor] Workers: 4 | Poll: 3s | Heartbeat: 30s
 ```
@@ -375,7 +372,7 @@ By default the server binds to `127.0.0.1` — accessible only from your machine
 
 ```bash
 export AGENTBRIDGE_TOKEN='replace-with-a-long-random-string'
-python run_server.py
+python start.py
 ```
 
 The CLI picks this up automatically. For raw HTTP:
