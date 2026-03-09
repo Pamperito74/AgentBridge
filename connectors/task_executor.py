@@ -315,14 +315,14 @@ def _task_gemini(task: dict) -> dict:
 
     Optional fields:
       files   — list of file paths to include as context (relative to cwd)
-      model   — Gemini model name (default: gemini-2.0-flash)
+      model   — Gemini model name (default: CLI's configured default)
     """
     prompt = task.get("prompt")
     if not prompt:
         return {"success": False, "error": "'prompt' is required for type 'gemini'"}
 
     files = task.get("files", [])
-    model = task.get("model", "gemini-2.0-flash")
+    model = task.get("model")  # None = let the CLI use its configured default
     cwd = task.get("cwd", ".")
 
     # Build a single stdin payload: file contents (labelled) + the prompt.
@@ -344,8 +344,12 @@ def _task_gemini(task: dict) -> dict:
 
     # Pipe the payload into `gemini` via stdin so we never hit shell quoting limits.
     try:
+        cmd = ["gemini"]
+        if model:
+            cmd.append(f"--model={model}")
+        cmd += ["-p", "-"]
         proc = subprocess.run(
-            ["gemini", f"--model={model}", "-p", "-"],
+            cmd,
             input=stdin_payload,
             capture_output=True,
             text=True,
