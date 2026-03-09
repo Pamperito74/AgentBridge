@@ -119,18 +119,23 @@ def poll_messages() -> list[dict]:
         return []
 
 
-def reply(sender: str, result: dict) -> None:
-    """Post the task result back to the requesting agent."""
+def reply(sender: str, result: dict, correlation_id: str | None = None) -> None:
+    """Post the task result back to the requesting agent.
+
+    Forwards correlation_id and sets msg_type='response' so that synchronous
+    callers using AgentBridge's request-response pattern (ab request / MCP
+    request tool) get unblocked immediately instead of timing out.
+    """
+    payload: dict = {
+        "sender": AGENT_NAME,
+        "recipient": sender,
+        "content": json.dumps(result, ensure_ascii=False),
+        "msg_type": "response",
+    }
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
     try:
-        requests.post(
-            f"{BRIDGE}/messages",
-            json={
-                "sender": AGENT_NAME,
-                "recipient": sender,
-                "content": json.dumps(result, ensure_ascii=False),
-            },
-            timeout=5,
-        )
+        requests.post(f"{BRIDGE}/messages", json=payload, timeout=5)
     except requests.RequestException as exc:
         print(f"[executor] WARNING: could not send reply to '{sender}': {exc}")
 
@@ -140,20 +145,37 @@ def reply(sender: str, result: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def handle(msg: dict) -> None:
+    # Only process chat/request messages — skip status, alert, response, etc.
+    msg_type = msg.get("msg_type", "chat")
+    if msg_type not in ("chat", "request"):
+        return
+
     sender = msg.get("sender", "unknown")
+    correlation_id = msg.get("correlation_id")
     raw = msg.get("content", "")
+
+    # Must be a directed message (recipient set) — ignore broadcasts/channel chat
+    if msg.get("recipient") != AGENT_NAME:
+        return
 
     try:
         task = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        reply(sender, {"success": False, "error": "Payload must be valid JSON"})
+        # Only reply with error if it looks intentional (has a recipient set)
+        reply(sender, {"success": False, "error": "Payload must be valid JSON"},
+              correlation_id=correlation_id)
+        return
+
+    # Must have a "type" key — otherwise it's not a task payload
+    if "type" not in task:
         return
 
     task_type = task.get("type", "")
-    print(f"[executor] Task '{task_type}' from '{sender}'")
+    print(f"[executor] Task '{task_type}' from '{sender}'" +
+          (f" [corr={correlation_id[:8]}]" if correlation_id else ""))
 
     result = dispatch(task_type, task)
-    reply(sender, result)
+    reply(sender, result, correlation_id=correlation_id)
 
 
 def dispatch(task_type: str, task: dict) -> dict:
@@ -263,9 +285,6 @@ def main() -> None:
     while True:
         messages = poll_messages()
         for msg in messages:
-            # Skip our own replies to avoid feedback loops
-            if msg.get("sender") == AGENT_NAME:
-                continue
             handle(msg)
         time.sleep(POLL_INTERVAL)
 
