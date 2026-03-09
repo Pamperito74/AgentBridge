@@ -41,6 +41,7 @@ The executor:
 - Python 3.10+ with the `requests` package available
 - For `git_commit` / `git_pr` tasks: `git` and `gh` CLI installed and authenticated
 - For `aider` tasks: `aider` installed (`pipx install aider-chat`)
+- For `gemini` tasks: Gemini CLI installed and authenticated (`npm install -g @google/generative-ai-cli && gemini auth login`)
 
 ---
 
@@ -222,6 +223,43 @@ Runs `aider` with `--yes --no-git` so it applies edits without prompting and
 without making its own commits. `model` is optional — falls back to the
 `AIDER_MODEL` env var (`ollama/qwen2.5-coder:7b` by default). `files` is
 optional — omit to let aider decide which files to touch.
+
+---
+
+### `gemini` — AI analysis via Gemini CLI (free)
+
+```json
+{
+  "type": "gemini",
+  "prompt": "Review this service for security issues and summarise findings",
+  "files": ["src/auth/auth.service.ts", "src/auth/auth.guard.ts"],
+  "model": "gemini-2.0-flash",
+  "cwd": "/Users/you/project"
+}
+```
+
+Sends the prompt (plus any file contents) to the **Gemini CLI** running locally.
+File contents are injected into the prompt automatically — Gemini's 1M-token
+context handles large codebases. The result (Gemini's text reply) arrives in
+`stdout`.
+
+**Why Gemini?** Free tier: 1,500 requests/day, 1M-token context, no credits
+needed. Best Claude partner for review, explain, and planning tasks that don't
+require writing back to disk.
+
+**Prerequisites:**
+
+```bash
+npm install -g @google/generative-ai-cli
+gemini auth login
+```
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `prompt` | yes | — | What to ask Gemini |
+| `files` | no | `[]` | Files to include as context (relative to `cwd`) |
+| `model` | no | `gemini-2.0-flash` | Gemini model |
+| `cwd` | no | `.` | Working directory for resolving relative paths |
 
 ---
 

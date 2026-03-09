@@ -58,7 +58,7 @@ STDOUT_CAP = 4000
 STDERR_CAP = 1000
 SHELL_TIMEOUT = 120  # seconds
 
-CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "test"]
+CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "gemini", "test"]
 
 # Cursor: ID of the last message we processed (persisted in memory only).
 # AgentBridge's delivery_cursors table tracks this server-side via since_id.
@@ -223,6 +223,7 @@ def dispatch(task_type: str, task: dict) -> dict:
         "git_commit": _task_git_commit,
         "git_pr": _task_git_pr,
         "aider": _task_aider,
+        "gemini": _task_gemini,
         "test": _task_test,
     }
     handler = handlers.get(task_type)
@@ -300,6 +301,70 @@ def _task_aider(task: dict) -> dict:
     files_arg = " ".join(files)
     cmd = f'aider --model {model} --message "{safe_prompt}" {files_arg} --yes --no-git'
     return _run(cmd, task.get("cwd", "."))
+
+
+def _task_gemini(task: dict) -> dict:
+    """Run a prompt through the Gemini CLI (free tier: 1,500 req/day, 1M context).
+
+    If 'files' is provided, each file's content is injected into the prompt
+    before the question — Gemini's 1M-token context handles large codebases.
+
+    Prerequisites:
+      npm install -g @google/generative-ai-cli   (or: pip install gemini-cli)
+      gemini auth login
+
+    Optional fields:
+      files   — list of file paths to include as context (relative to cwd)
+      model   — Gemini model name (default: gemini-2.0-flash)
+    """
+    prompt = task.get("prompt")
+    if not prompt:
+        return {"success": False, "error": "'prompt' is required for type 'gemini'"}
+
+    files = task.get("files", [])
+    model = task.get("model", "gemini-2.0-flash")
+    cwd = task.get("cwd", ".")
+
+    # Build a single stdin payload: file contents (labelled) + the prompt.
+    # This avoids shell-quoting issues with large file contents.
+    if files:
+        file_blocks = []
+        for path in files:
+            # Paths are relative to cwd
+            abs_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+            try:
+                with open(abs_path, encoding="utf-8", errors="replace") as fh:
+                    content = fh.read()
+                file_blocks.append(f"=== {path} ===\n{content}")
+            except OSError as exc:
+                return {"success": False, "error": f"Cannot read file '{path}': {exc}"}
+        stdin_payload = "\n\n".join(file_blocks) + f"\n\n{prompt}"
+    else:
+        stdin_payload = prompt
+
+    # Pipe the payload into `gemini` via stdin so we never hit shell quoting limits.
+    try:
+        proc = subprocess.run(
+            ["gemini", f"--model={model}", "-p", "-"],
+            input=stdin_payload,
+            capture_output=True,
+            text=True,
+            cwd=cwd or ".",
+            timeout=SHELL_TIMEOUT,
+        )
+        return {
+            "success": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "stdout": proc.stdout[-STDOUT_CAP:],
+            "stderr": proc.stderr[-STDERR_CAP:],
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": f"gemini timed out after {SHELL_TIMEOUT}s"}
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "error": "gemini CLI not found. Install: npm install -g @google/generative-ai-cli",
+        }
 
 
 def _task_test(task: dict) -> dict:
