@@ -21,6 +21,7 @@ Usage
   AGENTBRIDGE_URL=http://localhost:7890   (default)
   EXECUTOR_NAME=task-executor            (default)
   EXECUTOR_POLL_INTERVAL=3               (seconds, default)
+  EXECUTOR_MAX_WORKERS=4                 (parallel tasks, default)
   AIDER_MODEL=ollama/qwen2.5-coder:7b   (default)
 
 Sending a task from any Claude Code session
@@ -38,6 +39,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -49,6 +51,7 @@ AGENT_NAME = os.environ.get("EXECUTOR_NAME", "task-executor")
 POLL_INTERVAL = int(os.environ.get("EXECUTOR_POLL_INTERVAL", "3"))
 AIDER_MODEL = os.environ.get("AIDER_MODEL", "ollama/qwen2.5-coder:7b")
 HEARTBEAT_INTERVAL = 30  # seconds — well within the 4h agent TTL
+MAX_WORKERS = int(os.environ.get("EXECUTOR_MAX_WORKERS", "4"))
 
 # Maximum bytes captured from stdout / stderr to avoid flooding the bridge
 STDOUT_CAP = 4000
@@ -60,6 +63,13 @@ CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "test"]
 # Cursor: ID of the last message we processed (persisted in memory only).
 # AgentBridge's delivery_cursors table tracks this server-side via since_id.
 _last_message_id: str | None = None
+
+# Thread pool for parallel task execution.
+_pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+
+# Active task counter — used to report "busy" status in heartbeats.
+_active_tasks = 0
+_active_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -82,13 +92,21 @@ def register() -> None:
 
 
 def _heartbeat_loop() -> None:
-    """Background thread: send heartbeat every HEARTBEAT_INTERVAL seconds."""
+    """Background thread: send heartbeat every HEARTBEAT_INTERVAL seconds.
+
+    Reports 'busy' with a task count when work is in flight so other agents
+    (and the dashboard) can see the executor is actively running tasks.
+    """
     while True:
         time.sleep(HEARTBEAT_INTERVAL)
+        with _active_lock:
+            count = _active_tasks
+        status = "busy" if count > 0 else "online"
+        working_on = f"{count}/{MAX_WORKERS} tasks running" if count > 0 else ""
         try:
             requests.post(
                 f"{BRIDGE}/agents/{AGENT_NAME}/heartbeat",
-                json={"status": "online", "working_on": ""},
+                json={"status": status, "working_on": working_on},
                 timeout=5,
             )
         except requests.RequestException:
@@ -145,23 +163,27 @@ def reply(sender: str, result: dict, correlation_id: str | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 def handle(msg: dict) -> None:
+    """Validate the message and dispatch to the thread pool.
+
+    Runs in the main poll loop — must return quickly. Heavy work happens
+    inside _execute(), which the pool runs in a worker thread.
+    """
     # Only process chat/request messages — skip status, alert, response, etc.
     msg_type = msg.get("msg_type", "chat")
     if msg_type not in ("chat", "request"):
+        return
+
+    # Must be a directed message — ignore broadcasts/channel chat
+    if msg.get("recipient") != AGENT_NAME:
         return
 
     sender = msg.get("sender", "unknown")
     correlation_id = msg.get("correlation_id")
     raw = msg.get("content", "")
 
-    # Must be a directed message (recipient set) — ignore broadcasts/channel chat
-    if msg.get("recipient") != AGENT_NAME:
-        return
-
     try:
         task = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        # Only reply with error if it looks intentional (has a recipient set)
         reply(sender, {"success": False, "error": "Payload must be valid JSON"},
               correlation_id=correlation_id)
         return
@@ -171,10 +193,27 @@ def handle(msg: dict) -> None:
         return
 
     task_type = task.get("type", "")
-    print(f"[executor] Task '{task_type}' from '{sender}'" +
-          (f" [corr={correlation_id[:8]}]" if correlation_id else ""))
+    print(f"[executor] Queuing task '{task_type}' from '{sender}'" +
+          (f" [corr={correlation_id[:8]}]" if correlation_id else "") +
+          f" (pool: {_active_tasks}/{MAX_WORKERS} active)")
 
-    result = dispatch(task_type, task)
+    _pool.submit(_execute, sender, task_type, task, correlation_id)
+
+
+def _execute(sender: str, task_type: str, task: dict, correlation_id: str | None) -> None:
+    """Run a task in a worker thread, track active count, reply when done."""
+    global _active_tasks
+    with _active_lock:
+        _active_tasks += 1
+    try:
+        result = dispatch(task_type, task)
+        print(f"[executor] Done '{task_type}' from '{sender}' — "
+              f"{'ok' if result.get('success') else 'FAILED'}")
+    except Exception as exc:  # noqa: BLE001
+        result = {"success": False, "error": f"Unhandled exception: {exc}"}
+    finally:
+        with _active_lock:
+            _active_tasks -= 1
     reply(sender, result, correlation_id=correlation_id)
 
 
@@ -192,10 +231,7 @@ def dispatch(task_type: str, task: dict) -> dict:
             "success": False,
             "error": f"Unknown task type '{task_type}'. Supported: {list(handlers)}",
         }
-    try:
-        return handler(task)
-    except Exception as exc:  # noqa: BLE001
-        return {"success": False, "error": f"Unhandled exception: {exc}"}
+    return handler(task)
 
 
 # ---------------------------------------------------------------------------
@@ -278,19 +314,24 @@ def _task_test(task: dict) -> dict:
 def main() -> None:
     register()
     start_heartbeat()
-    print(f"[executor] Polling every {POLL_INTERVAL}s — send tasks via AgentBridge to '{AGENT_NAME}'")
-    print(f"[executor] Heartbeat every {HEARTBEAT_INTERVAL}s")
+    print(f"[executor] Registered as '{AGENT_NAME}' — parallel executor")
+    print(f"[executor] Workers: {MAX_WORKERS} | Poll: {POLL_INTERVAL}s | Heartbeat: {HEARTBEAT_INTERVAL}s")
+    print(f"[executor] Set EXECUTOR_MAX_WORKERS to change concurrency (current: {MAX_WORKERS})")
     print("[executor] Ctrl-C to stop\n")
 
-    while True:
-        messages = poll_messages()
-        for msg in messages:
-            handle(msg)
-        time.sleep(POLL_INTERVAL)
+    try:
+        while True:
+            messages = poll_messages()
+            for msg in messages:
+                handle(msg)
+            time.sleep(POLL_INTERVAL)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("\n[executor] Shutting down — waiting for in-flight tasks to complete...")
+        _pool.shutdown(wait=True)
+        print("[executor] All tasks done. Stopped.")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[executor] Stopped.")
+    main()
