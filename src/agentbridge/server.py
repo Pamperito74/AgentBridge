@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from .models import MESSAGE_TYPES
+from .models import MESSAGE_TYPES, Message
 from .schema_registry import SchemaRegistry, SchemaValidationError
 from .store import MessageStore
 from .ws_manager import get_ws_manager
@@ -199,25 +199,34 @@ class EventSchemaWriteRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class CursorRequest(BaseModel):
+    agent_name: str = Field(min_length=1, max_length=128)
+    thread: str = Field(default="general", min_length=1, max_length=128)
+    last_message_id: str = Field(min_length=1)
+    last_timestamp: str | None = None
+
+
 # --- Agents ---
 
 @http_app.post("/agents")
-def http_register_agent(body: RegisterAgentRequest):
-    agent = get_store().register_agent(body.name, body.role, body.capabilities)
+async def http_register_agent(body: RegisterAgentRequest):
+    agent = await get_store().register_agent_async(body.name, body.role, body.capabilities)
     result = agent.model_dump(mode="json")
     _broadcast_sse("agent_joined", result)
     return result
 
 
 @http_app.get("/agents")
-def http_list_agents():
-    return [a.model_dump(mode="json") for a in get_store().list_agents()]
+async def http_list_agents():
+    agents = await get_store().list_agents_async()
+    return [a.model_dump(mode="json") for a in agents]
 
 
 @http_app.get("/actors")
-def http_list_actors():
+async def http_list_actors():
     actors = []
-    for a in get_store().list_agents():
+    agent_rows = await get_store().list_agents_async()
+    for a in agent_rows:
         data = a.model_dump(mode="json")
         actors.append({
             "id": data["name"],
@@ -232,7 +241,7 @@ def http_list_actors():
 
 
 @http_app.delete("/agents/{name}")
-def http_kick_agent(name: str):
+async def http_kick_agent(name: str):
     """Remove an agent from the registry and drop their WS connection if active."""
     manager = get_ws_manager()
     # Drop WS connection if live
@@ -245,17 +254,15 @@ def http_kick_agent(name: str):
         except Exception:
             pass
     # Remove from DB
-    with get_store()._lock:
-        get_store()._conn.execute("DELETE FROM agents WHERE name = ?", (name,))
-        get_store()._conn.commit()
+    await get_store().remove_agent_async(name)
     result = {"kicked": name}
     _broadcast_sse("agent_kicked", {"name": name})
     return result
 
 
 @http_app.post("/agents/{name}/heartbeat")
-def http_heartbeat(name: str, body: HeartbeatRequest):
-    agent = get_store().heartbeat(name, status=body.status, working_on=body.working_on)
+async def http_heartbeat(name: str, body: HeartbeatRequest):
+    agent = await get_store().heartbeat_async(name, status=body.status, working_on=body.working_on)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     result = agent.model_dump(mode="json")
@@ -266,8 +273,8 @@ def http_heartbeat(name: str, body: HeartbeatRequest):
 # --- Messages ---
 
 @http_app.post("/messages")
-def http_send_message(body: SendMessageRequest):
-    msg = get_store().add_message(
+async def http_send_message(body: SendMessageRequest):
+    msg = await get_store().add_message_async(
         sender=body.sender,
         content=body.content,
         recipient=body.recipient,
@@ -300,31 +307,31 @@ def http_send_message(body: SendMessageRequest):
 
 
 @http_app.get("/messages")
-def http_read_messages(
+async def http_read_messages(
     thread: str | None = Query(None),
     sender: str | None = Query(None),
     as_agent: str | None = Query(None),
     since: str | None = Query(None),
     before: str | None = Query(None),
     correlation_id: str | None = Query(None),
+    since_id: str | None = Query(None, alias="since_id"),
     limit: int = Query(50, ge=1, le=500),
 ):
-    return [
-        m.model_dump(mode="json")
-        for m in get_store().read_messages(
-            thread=thread, since=since, before=before, limit=limit,
-            sender=sender, as_agent=as_agent, correlation_id=correlation_id,
-        )
-    ]
+    messages = await get_store().read_messages_async(
+        thread=thread, since=since, before=before, limit=limit,
+        sender=sender, as_agent=as_agent, correlation_id=correlation_id,
+        since_id=since_id,
+    )
+    return [m.model_dump(mode="json") for m in messages]
 
 
 @http_app.post("/bus/events")
-def http_send_event(body: EventWriteRequest):
+async def http_send_event(body: EventWriteRequest):
     try:
         schema_registry.validate(body.event_type, body.metadata)
     except SchemaValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    msg = get_store().add_message(
+    msg = await get_store().add_message_async(
         sender=body.actor_id,
         recipient=body.target_id,
         thread=body.thread,
@@ -347,22 +354,44 @@ def http_send_event(body: EventWriteRequest):
 
 
 @http_app.get("/bus/events")
-def http_read_events(
+async def http_read_events(
     thread: str | None = Query(None),
     actor_id: str | None = Query(None),
     target_id: str | None = Query(None),
     event_type: str | None = Query(None),
     since: str | None = Query(None),
     before: str | None = Query(None),
+    since_id: str | None = Query(None, alias="since_id"),
     limit: int = Query(50, ge=1, le=500),
 ):
-    return [
-        m.model_dump(mode="json")
-        for m in get_store().read_messages(
-            thread=thread, actor_id=actor_id, target_id=target_id,
-            event_type=event_type, since=since, before=before, limit=limit,
-        )
-    ]
+    messages = await get_store().read_messages_async(
+        thread=thread, actor_id=actor_id, target_id=target_id,
+        event_type=event_type, since=since, before=before, limit=limit,
+        since_id=since_id,
+    )
+    return [m.model_dump(mode="json") for m in messages]
+
+
+@http_app.get("/cursors")
+async def http_list_cursors(agent: str | None = Query(None)):
+    cursors = await get_store().list_delivery_cursors_async(agent)
+    return cursors
+
+
+@http_app.post("/cursors")
+async def http_set_cursor(body: CursorRequest):
+    timestamp = body.last_timestamp
+    if not timestamp:
+        timestamp = await get_store().message_timestamp_async(body.last_message_id)
+        if not timestamp:
+            raise HTTPException(status_code=404, detail="message not found")
+    await get_store().set_delivery_cursor_async(
+        body.agent_name,
+        body.thread,
+        body.last_message_id,
+        timestamp,
+    )
+    return {"ok": True}
 
 
 @http_app.get("/bus/schemas")
@@ -382,40 +411,103 @@ def http_register_event_schema(body: EventSchemaWriteRequest):
 # --- Threads ---
 
 @http_app.post("/threads")
-def http_create_thread(body: CreateThreadRequest):
-    t = get_store().create_thread(body.name, body.created_by)
+async def http_create_thread(body: CreateThreadRequest):
+    t = await get_store().create_thread_async(body.name, body.created_by)
     result = t.model_dump(mode="json")
     _broadcast_sse("thread_created", result)
     return result
 
 
 @http_app.get("/threads")
-def http_list_threads():
-    return [t.model_dump(mode="json") for t in get_store().list_threads()]
+async def http_list_threads():
+    threads = await get_store().list_threads_async()
+    return [t.model_dump(mode="json") for t in threads]
 
 
 @http_app.get("/threads/{name}/summary")
-def http_thread_summary(name: str):
-    return get_store().thread_summary(name).model_dump(mode="json")
+async def http_thread_summary(name: str):
+    summary = await get_store().thread_summary_async(name)
+    return summary.model_dump(mode="json")
 
 
 # --- SSE ---
 
 @http_app.get("/events")
-async def sse_events(request: Request):
+async def sse_events(
+    request: Request,
+    since_id: str | None = Query(None, alias="since_id"),
+    thread: str | None = Query(None),
+    cursor_agent: str | None = Query(None, alias="cursor_agent"),
+    cursor_thread: str | None = Query(None, alias="cursor_thread"),
+    backlog_limit: int = Query(200, ge=10, le=1000),
+):
     queue: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
     loop = asyncio.get_running_loop()
     with _sse_lock:
         _sse_subscribers.append((loop, queue))
 
+    thread_filter = thread
+    cursor_thread_value = cursor_thread or thread_filter or "general"
+    since_timestamp: str | None = None
+    if since_id:
+        since_timestamp = await get_store().message_timestamp_async(since_id)
+    elif cursor_agent:
+        cursor = await get_store().get_delivery_cursor_async(cursor_agent, cursor_thread_value)
+        if cursor and cursor.get("last_timestamp"):
+            since_timestamp = cursor["last_timestamp"]
+
+    backlog: list[Message] = []
+    if since_timestamp:
+        backlog = await get_store().read_messages_async(
+            thread=thread_filter, since=since_timestamp, limit=backlog_limit,
+        )
+
+    def _build_sse(event_name: str, payload: dict) -> str:
+        return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+    async def _update_cursor(payload: dict, payload_thread: str | None = None):
+        if not cursor_agent:
+            return
+        message_id = payload.get("id")
+        timestamp = payload.get("timestamp")
+        if not message_id or not timestamp:
+            return
+        thread_name = cursor_thread_value or payload_thread or "general"
+        await get_store().set_delivery_cursor_async(cursor_agent, thread_name, message_id, timestamp)
+
+    def _parse_event(data: str) -> tuple[str | None, dict | None]:
+        event_name: str | None = None
+        payload: dict | None = None
+        for line in data.splitlines():
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                raw = line[len("data: "):]
+                try:
+                    payload = json.loads(raw)
+                except json.JSONDecodeError:
+                    payload = None
+        return event_name, payload
+
     async def event_generator():
         try:
             yield "event: connected\ndata: {}\n\n"
+            for msg in backlog:
+                payload = msg.model_dump(mode="json")
+                if thread_filter and payload.get("thread") != thread_filter:
+                    continue
+                await _update_cursor(payload, msg.thread)
+                yield _build_sse("message", payload)
             while True:
                 if await request.is_disconnected():
                     break
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=15)
+                    event_name, payload = _parse_event(data)
+                    if thread_filter and payload and payload.get("thread") != thread_filter:
+                        continue
+                    if payload:
+                        await _update_cursor(payload, payload.get("thread"))
                     yield data
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
@@ -764,9 +856,7 @@ def kick_agent(name: str) -> str:
             ).result(timeout=2)
         except Exception:
             pass
-    with get_store()._lock:
-        get_store()._conn.execute("DELETE FROM agents WHERE name = ?", (name,))
-        get_store()._conn.commit()
+    get_store().remove_agent(name)
     _broadcast_sse("agent_kicked", {"name": name})
     return f"Agent '{name}' kicked and removed from registry."
 
@@ -797,9 +887,24 @@ def read(
     sender: str | None = None,
     as_agent: str | None = None,
     limit: int = 20,
+    since_id: str | None = None,
+    cursor_agent: str | None = None,
+    cursor_thread: str = "general",
+    save_cursor: bool = False,
 ) -> str:
-    """Read recent messages. Filter by thread or sender. Use as_agent to see your inbox."""
-    messages = get_store().read_messages(thread=thread, sender=sender, as_agent=as_agent, limit=limit)
+    """Read recent messages. Filter by thread or sender. Use as_agent to see your inbox.
+
+    Optional parameters:
+    - since_id: only return messages after this ID.
+    - cursor_agent/cursor_thread + save_cursor: persist the last message ID for the given agent/thread so you can resume later.
+    """
+    messages = get_store().read_messages(
+        thread=thread,
+        sender=sender,
+        as_agent=as_agent,
+        limit=limit,
+        since_id=since_id,
+    )
     if not messages:
         return "No messages."
     lines = []
@@ -810,7 +915,45 @@ def read(
         artifact_tag = f" [{len(m.artifacts)} artifacts]" if m.artifacts else ""
         corr_tag = f" (cid={m.correlation_id[:8]})" if m.correlation_id else ""
         lines.append(f"{type_tag}{prefix}{m.sender}{to}: {m.content}{artifact_tag}{corr_tag}")
+    if save_cursor:
+        if not cursor_agent:
+            raise ValueError("save_cursor requires cursor_agent")
+        last = messages[-1]
+        thread_name = cursor_thread or thread or last.thread
+        timestamp = last.timestamp.isoformat()
+        get_store().set_delivery_cursor(cursor_agent, thread_name, last.id, timestamp)
     return "\n".join(lines)
+
+
+@mcp.tool()
+def list_cursors(agent: str | None = None) -> str:
+    """List persisted delivery cursors."""
+    cursors = get_store().list_delivery_cursors(agent)
+    if not cursors:
+        return "No cursors recorded."
+    lines = []
+    for c in cursors:
+        lines.append(f"{c['agent_name']}#{c['thread']}: last={c['last_message_id'] or '<none>'} @ {c['last_timestamp'] or 'unknown'}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_cursor(agent: str, thread: str = "general") -> str:
+    """Get a single delivery cursor for an agent/thread."""
+    cursor = get_store().get_delivery_cursor(agent, thread)
+    if not cursor:
+        return f"No cursor for {agent}#{thread}"
+    return f"{agent}#{thread}: {cursor['last_message_id']} @ {cursor['last_timestamp']} (updated {cursor['updated_at']})"
+
+
+@mcp.tool()
+def set_cursor(agent: str, thread: str, last_message_id: str, timestamp: str | None = None) -> str:
+    """Persist a delivery cursor."""
+    ts = timestamp or get_store().message_timestamp(last_message_id)
+    if not ts:
+        raise ValueError("message_id not found")
+    get_store().set_delivery_cursor(agent, thread, last_message_id, ts)
+    return f"Cursor set for {agent}#{thread} -> {last_message_id} @ {ts}"
 
 
 @mcp.tool()
