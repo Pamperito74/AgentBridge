@@ -137,18 +137,7 @@ def _try_ws_broadcast(message: dict, exclude: str | None = None):
 async def lifespan(app: FastAPI):
     global _uvicorn_loop
     _uvicorn_loop = asyncio.get_running_loop()
-    s = get_store()
-    # Bootstrap admin account on first run
-    admin_user = os.environ.get("AGENTBRIDGE_ADMIN_USER", "admin")
-    admin_pass = os.environ.get("AGENTBRIDGE_ADMIN_PASSWORD", "changeme")
-    created = s.bootstrap_admin(admin_user, admin_pass)
-    if created:
-        logger.info("=" * 60)
-        logger.info("First run: admin account created")
-        logger.info("  Username: %s", admin_user)
-        logger.info("  Password: %s", admin_pass)
-        logger.info("  Change password after first login!")
-        logger.info("=" * 60)
+    get_store()
     yield
     global store
     with _store_lock:
@@ -164,7 +153,7 @@ http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
 async def auth_and_logging_middleware(request: Request, call_next):
     started = time.perf_counter()
     path = request.url.path
-    _public = {"/health", "/ui", "/favicon.ico", "/auth/login"}
+    _public = {"/health", "/ui", "/favicon.ico", "/auth/login", "/auth/setup"}
     request.state.user = None
     request.state.is_admin = False
 
@@ -626,7 +615,9 @@ def serve_dashboard():
 @http_app.get("/health")
 async def health():
     has_users = await asyncio.to_thread(get_store().has_any_users)
-    if has_users:
+    if not has_users and not _auth_token:
+        auth_mode = "setup"
+    elif has_users:
         auth_mode = "users"
     elif _auth_token:
         auth_mode = "token"
@@ -636,6 +627,19 @@ async def health():
 
 
 # ── Auth endpoints ────────────────────────────────────────────────────
+
+@http_app.post("/auth/setup", status_code=201)
+async def auth_setup(body: CreateUserRequest):
+    """Create the first admin account. Only works when no users exist."""
+    if await asyncio.to_thread(get_store().has_any_users):
+        raise HTTPException(status_code=409, detail="Setup already complete — an admin account exists")
+    user = await asyncio.to_thread(
+        get_store().create_user, body.username, body.password, body.display_name or body.username, "admin"
+    )
+    token = await asyncio.to_thread(get_store().create_session, user["id"])
+    logger.info("First-run setup complete: admin account created for '%s'", body.username)
+    return {"token": token, "user": user}
+
 
 @http_app.post("/auth/login")
 async def auth_login(body: LoginRequest):

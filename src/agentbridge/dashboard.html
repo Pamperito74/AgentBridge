@@ -1359,6 +1359,19 @@
         <span class="login-google-badge">Coming soon</span>
       </button>
     </div>
+    <!-- First-run setup -->
+    <div id="login-setup-form" style="display:none">
+      <div class="login-field">
+        <label for="setup-username">Username</label>
+        <input type="text" id="setup-username" placeholder="admin" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="login-field">
+        <label for="setup-password">Password</label>
+        <input type="password" id="setup-password" placeholder="Min 8 characters" autocomplete="new-password">
+      </div>
+      <button class="login-btn" id="setup-btn">Create admin account</button>
+      <div class="login-error" id="setup-error"></div>
+    </div>
     <!-- Legacy token mode login -->
     <div id="login-token-form" style="display:none">
       <div class="login-field">
@@ -1824,6 +1837,51 @@ async function initAuth() {
     }
   });
 
+  // ── First-run setup ───────────────────────────────────────────────
+  const setupForm = document.getElementById('login-setup-form');
+  const setupBtn = document.getElementById('setup-btn');
+  const setupError = document.getElementById('setup-error');
+
+  setupBtn.addEventListener('click', async () => {
+    const username = document.getElementById('setup-username').value.trim();
+    const password = document.getElementById('setup-password').value;
+    if (!username) { setupError.textContent = 'Enter a username.'; return; }
+    if (password.length < 8) { setupError.textContent = 'Password must be at least 8 characters.'; return; }
+    setupBtn.disabled = true;
+    setupBtn.textContent = 'Creating…';
+    setupError.textContent = '';
+    try {
+      const r = await fetch(API + '/auth/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, display_name: username, role: 'admin' }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || 'Setup failed');
+      }
+      const d = await r.json();
+      saveToken(d.token, true);
+      currentUser = d.user;
+      showDashboard();
+    } catch (e) {
+      setupError.textContent = e.message;
+      setupBtn.disabled = false;
+      setupBtn.textContent = 'Create admin account';
+    }
+  });
+  document.getElementById('setup-password').addEventListener('keydown', e => { if (e.key === 'Enter') setupBtn.click(); });
+  document.getElementById('setup-username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('setup-password').focus(); });
+
+  function showSetup() {
+    loginUsersForm.style.display = 'none';
+    loginTokenForm.style.display = 'none';
+    setupForm.style.display = '';
+    loginTitle.textContent = 'Welcome! Create your admin account';
+    loginScreen.classList.add('visible');
+    document.getElementById('setup-username').focus();
+  }
+
   // ── Startup auth flow ─────────────────────────────────────────────
   const authMode = await getAuthMode();
 
@@ -1833,9 +1891,9 @@ async function initAuth() {
       showDashboard();
     } else {
       clearToken();
-      if (authMode === 'open') {
-        showDashboard();
-      } else if (authMode === 'token') {
+      if (authMode === 'setup') { showSetup(); }
+      else if (authMode === 'open') { showDashboard(); }
+      else if (authMode === 'token') {
         loginUsersForm.style.display = 'none';
         loginTokenForm.style.display = '';
         loginTitle.textContent = 'Enter your access token to continue';
@@ -1846,9 +1904,9 @@ async function initAuth() {
         usernameInput.focus();
       }
     }
-  } else if (authMode === 'open') {
-    showDashboard();
-  } else if (authMode === 'token') {
+  } else if (authMode === 'setup') { showSetup(); }
+  else if (authMode === 'open') { showDashboard(); }
+  else if (authMode === 'token') {
     loginUsersForm.style.display = 'none';
     loginTokenForm.style.display = '';
     loginTitle.textContent = 'Enter your access token to continue';
