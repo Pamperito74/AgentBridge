@@ -1,7 +1,12 @@
 import asyncio
 import sqlite3
 import json
+import os
 import threading
+import hashlib
+import secrets
+import binascii
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -13,6 +18,23 @@ DB_PATH = DB_DIR / "messages.db"
 AGENT_TTL_HOURS = 4
 MESSAGE_TTL_HOURS = 24
 PRUNE_INTERVAL_SEC = 300  # 5 minutes
+SESSION_TTL_DAYS = 30
+
+
+def _hash_password(password: str) -> str:
+    salt = os.urandom(32)
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 200_000)
+    return binascii.hexlify(salt).decode() + ':' + binascii.hexlify(key).decode()
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt_hex, key_hex = stored_hash.split(':', 1)
+        salt = binascii.unhexlify(salt_hex)
+        key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 200_000)
+        return secrets.compare_digest(binascii.hexlify(key).decode(), key_hex)
+    except Exception:
+        return False
 
 
 class MessageStore:
@@ -82,6 +104,22 @@ class MessageStore:
                    updated_at TEXT NOT NULL,
                    PRIMARY KEY (agent_name, thread)
                );
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    display_name TEXT DEFAULT '',
+                    role TEXT DEFAULT 'member',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    token TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    last_used TEXT NOT NULL
+                );
             """)
             self._conn.commit()
 
@@ -116,6 +154,7 @@ class MessageStore:
                 ("status", "ALTER TABLE agents ADD COLUMN status TEXT DEFAULT 'online'"),
                 ("working_on", "ALTER TABLE agents ADD COLUMN working_on TEXT DEFAULT ''"),
                 ("capabilities", "ALTER TABLE agents ADD COLUMN capabilities TEXT DEFAULT '[]'"),
+                ("agent_type", "ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'bot'"),
             ]:
                 if col not in agent_cols:
                     self._conn.execute(ddl)
@@ -145,14 +184,15 @@ class MessageStore:
             self._conn.execute("DELETE FROM messages WHERE timestamp < ?", (cutoff,))
             agent_cutoff = (datetime.now(timezone.utc) - timedelta(hours=AGENT_TTL_HOURS)).isoformat()
             self._conn.execute("DELETE FROM agents WHERE last_seen < ?", (agent_cutoff,))
+            self._conn.execute("DELETE FROM user_sessions WHERE expires_at < ?", (datetime.now(timezone.utc).isoformat(),))
             self._conn.commit()
         return None
 
     async def _run_in_thread(self, func, *args, **kwargs):
         return await asyncio.to_thread(func, *args, **kwargs)
 
-    async def register_agent_async(self, name: str, role: str = "", capabilities: list[str] | None = None) -> Agent:
-        return await self._run_in_thread(self.register_agent, name, role, capabilities)
+    async def register_agent_async(self, name: str, role: str = "", capabilities: list[str] | None = None, agent_type: str = "bot") -> Agent:
+        return await self._run_in_thread(self.register_agent, name, role, capabilities, agent_type)
 
     async def list_agents_async(self) -> list[Agent]:
         return await self._run_in_thread(self.list_agents)
@@ -231,14 +271,14 @@ class MessageStore:
 
     # --- Agents ---
 
-    def register_agent(self, name: str, role: str = "", capabilities: list[str] | None = None) -> Agent:
+    def register_agent(self, name: str, role: str = "", capabilities: list[str] | None = None, agent_type: str = "bot") -> Agent:
         now = datetime.now(timezone.utc)
         caps = capabilities or []
-        agent = Agent(name=name, role=role, capabilities=caps, connected_at=now, last_seen=now)
+        agent = Agent(name=name, role=role, capabilities=caps, agent_type=agent_type, connected_at=now, last_seen=now)
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO agents (name, role, status, working_on, capabilities, connected_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (agent.name, agent.role, agent.status, agent.working_on, json.dumps(agent.capabilities), agent.connected_at.isoformat(), agent.last_seen.isoformat()),
+                "INSERT OR REPLACE INTO agents (name, role, status, working_on, capabilities, agent_type, connected_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (agent.name, agent.role, agent.status, agent.working_on, json.dumps(agent.capabilities), agent.agent_type, agent.connected_at.isoformat(), agent.last_seen.isoformat()),
             )
             self._conn.commit()
         return agent
@@ -258,26 +298,28 @@ class MessageStore:
             )
             self._conn.commit()
             row = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, connected_at, last_seen FROM agents WHERE name = ?", (name,)
+                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen FROM agents WHERE name = ?", (name,)
             ).fetchone()
         if not row:
             return None
         return Agent(
             name=row[0], role=row[1], status=row[2], working_on=row[3],
             capabilities=json.loads(row[4]) if row[4] else [],
-            connected_at=datetime.fromisoformat(row[5]), last_seen=datetime.fromisoformat(row[6]),
+            agent_type=row[5] or "bot",
+            connected_at=datetime.fromisoformat(row[6]), last_seen=datetime.fromisoformat(row[7]),
         )
 
     def list_agents(self) -> list[Agent]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, connected_at, last_seen FROM agents ORDER BY last_seen DESC"
+                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen FROM agents ORDER BY last_seen DESC"
             ).fetchall()
         return [
             Agent(
                 name=r[0], role=r[1], status=r[2] or "online", working_on=r[3] or "",
                 capabilities=json.loads(r[4]) if r[4] else [],
-                connected_at=datetime.fromisoformat(r[5]), last_seen=datetime.fromisoformat(r[6]),
+                agent_type=r[5] or "bot",
+                connected_at=datetime.fromisoformat(r[6]), last_seen=datetime.fromisoformat(r[7]),
             )
             for r in rows
         ]
@@ -285,6 +327,118 @@ class MessageStore:
     def find_agents_by_capability(self, capability: str) -> list[Agent]:
         """Return agents that advertise a given capability."""
         return [a for a in self.list_agents() if capability in a.capabilities]
+
+    # --- Users ---
+
+    def has_any_users(self) -> bool:
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM users").fetchone()
+        return (row[0] if row else 0) > 0
+
+    def bootstrap_admin(self, username: str, password: str) -> dict | None:
+        """Create the first admin account if no users exist. Returns user dict or None if users already exist."""
+        if self.has_any_users():
+            return None
+        return self.create_user(username, password, display_name="Admin", role="admin")
+
+    def create_user(self, username: str, password: str, display_name: str = "", role: str = "member") -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        user_id = str(uuid.uuid4())
+        password_hash = _hash_password(password)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO users (id, username, password_hash, display_name, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, username, password_hash, display_name or "", role, now, now),
+            )
+            self._conn.commit()
+        return {"id": user_id, "username": username, "display_name": display_name or "", "role": role, "created_at": now, "updated_at": now}
+
+    def get_user_by_id(self, user_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, username, display_name, role, created_at, updated_at FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "username": row[1], "display_name": row[2], "role": row[3], "created_at": row[4], "updated_at": row[5]}
+
+    def authenticate_user(self, username: str, password: str) -> dict | None:
+        """Verify username+password. Returns user dict (no password_hash) or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, username, password_hash, display_name, role, created_at, updated_at FROM users WHERE username = ?", (username,)
+            ).fetchone()
+        if not row:
+            return None
+        if not _verify_password(password, row[2]):
+            return None
+        return {"id": row[0], "username": row[1], "display_name": row[3], "role": row[4], "created_at": row[5], "updated_at": row[6]}
+
+    def list_users(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, username, display_name, role, created_at, updated_at FROM users ORDER BY created_at ASC"
+            ).fetchall()
+        return [{"id": r[0], "username": r[1], "display_name": r[2], "role": r[3], "created_at": r[4], "updated_at": r[5]} for r in rows]
+
+    def update_user(self, user_id: str, display_name: str | None = None, role: str | None = None, password: str | None = None) -> dict | None:
+        now = datetime.now(timezone.utc).isoformat()
+        updates = ["updated_at = ?"]
+        params: list = [now]
+        if display_name is not None:
+            updates.append("display_name = ?")
+            params.append(display_name)
+        if role is not None:
+            updates.append("role = ?")
+            params.append(role)
+        if password is not None:
+            updates.append("password_hash = ?")
+            params.append(_hash_password(password))
+        params.append(user_id)
+        with self._lock:
+            self._conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+            self._conn.commit()
+        return self.get_user_by_id(user_id)
+
+    def delete_user(self, user_id: str) -> bool:
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            self._conn.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            self._conn.commit()
+        return cursor.rowcount > 0
+
+    # --- Sessions ---
+
+    def create_session(self, user_id: str) -> str:
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(days=SESSION_TTL_DAYS)).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO user_sessions (token, user_id, created_at, expires_at, last_used) VALUES (?, ?, ?, ?, ?)",
+                (token, user_id, now.isoformat(), expires_at, now.isoformat()),
+            )
+            self._conn.commit()
+        return token
+
+    def get_session_user(self, token: str) -> dict | None:
+        """Validate session token. Returns user dict or None if invalid/expired."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT user_id, expires_at FROM user_sessions WHERE token = ?", (token,)
+            ).fetchone()
+            if not row or row[1] < now:
+                return None
+            # Update last_used
+            self._conn.execute("UPDATE user_sessions SET last_used = ? WHERE token = ?", (now, token))
+            self._conn.commit()
+        return self.get_user_by_id(row[0])
+
+    def delete_session(self, token: str):
+        with self._lock:
+            self._conn.execute("DELETE FROM user_sessions WHERE token = ?", (token,))
+            self._conn.commit()
 
     # --- Messages ---
 

@@ -975,6 +975,44 @@
     text-align: center;
     line-height: 1.5;
   }
+  .login-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .login-divider::before, .login-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .login-google-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 14px;
+    cursor: not-allowed;
+    opacity: 0.6;
+    position: relative;
+  }
+  .login-google-badge {
+    font-size: 10px;
+    background: var(--border);
+    color: var(--muted);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
   /* logout button in header */
   .logout-btn {
     background: transparent;
@@ -987,6 +1025,147 @@
     transition: border-color 0.15s, color 0.15s;
   }
   .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* User management panel */
+  .users-panel {
+    position: fixed;
+    top: 52px;
+    right: 0;
+    width: 360px;
+    max-height: calc(100vh - 60px);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    box-shadow: -4px 4px 16px rgba(0,0,0,0.15);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .users-panel.visible { display: flex; }
+  .users-panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .users-panel-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .users-panel-close:hover { color: var(--text); }
+  .users-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  .user-row:hover { background: var(--bg); }
+  .users-panel .user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .user-row .user-info { flex: 1; min-width: 0; }
+  .user-row .user-name { font-weight: 500; color: var(--fg); }
+  .user-row .user-meta { color: var(--fg-dim); font-size: 11px; }
+  .user-role-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--border);
+    color: var(--fg-dim);
+  }
+  .user-role-badge.admin { background: var(--accent); color: white; }
+  .user-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-dim);
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .user-delete-btn:hover { background: var(--red-dim); color: var(--red); }
+  .users-create-form {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .users-create-form h4 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .users-create-form input, .users-create-form select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+  .users-create-form input:focus, .users-create-form select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .users-create-row { display: flex; gap: 6px; }
+  .users-create-row input { flex: 1; }
+  .users-create-btn {
+    padding: 6px 14px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .users-create-btn:hover { background: var(--accent-dim); }
+  .users-error { color: var(--red); font-size: 12px; }
+  /* Manage users button in header */
+  .manage-users-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--fg-dim);
+    display: none;
+  }
+  .manage-users-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ── Layout / panel controls in header ── */
   .layout-btn, .reset-btn {
@@ -1153,19 +1332,68 @@
   <div class="login-card">
     <div class="login-logo">
       <div class="login-logo-dot"></div>
-      AgentBridge
     </div>
-    <div class="login-subtitle">Enter your access token to continue</div>
-    <div class="login-field">
-      <label for="login-token-input">Access Token</label>
-      <input type="password" id="login-token-input" placeholder="ab-••••••••••••••••" autocomplete="current-password" spellcheck="false">
+    <div id="login-title" class="login-subtitle">Sign in to AgentBridge</div>
+    <!-- Users mode login (default) -->
+    <div id="login-users-form">
+      <div class="login-field">
+        <label for="login-username-input">Username</label>
+        <input type="text" id="login-username-input" placeholder="admin" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="login-field">
+        <label for="login-password-input">Password</label>
+        <input type="password" id="login-password-input" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <label class="login-remember">
+        <input type="checkbox" id="login-remember"> Remember on this device
+      </label>
+      <button class="login-btn" id="login-btn">Sign in</button>
+      <div class="login-error" id="login-error"></div>
+      <div class="login-divider"><span>or</span></div>
+      <button class="login-google-btn" id="login-google-btn" disabled title="Google SSO coming soon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 6.294C4.672 4.267 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        Continue with Google
+        <span class="login-google-badge">Coming soon</span>
+      </button>
     </div>
-    <label class="login-remember">
-      <input type="checkbox" id="login-remember"> Remember on this device
-    </label>
-    <button class="login-btn" id="login-btn">Connect</button>
-    <div class="login-error" id="login-error"></div>
-    <div class="login-hint">Token is set via <code>AGENTBRIDGE_TOKEN</code> env var on the server.</div>
+    <!-- Legacy token mode login -->
+    <div id="login-token-form" style="display:none">
+      <div class="login-field">
+        <label for="login-token-input">Access Token</label>
+        <input type="password" id="login-token-input" placeholder="ab-••••••••••••••••" autocomplete="current-password" spellcheck="false">
+      </div>
+      <label class="login-remember">
+        <input type="checkbox" id="login-remember-token"> Remember on this device
+      </label>
+      <button class="login-btn" id="login-token-btn">Connect</button>
+      <div class="login-error" id="login-token-error"></div>
+      <div class="login-hint">Token is set via <code>AGENTBRIDGE_TOKEN</code> env var on the server.</div>
+    </div>
+  </div>
+</div>
+
+<!-- User management panel (admin only) -->
+<div class="users-panel" id="users-panel">
+  <div class="users-panel-header">
+    <span>Manage Users</span>
+    <button class="users-panel-close" id="users-panel-close">×</button>
+  </div>
+  <div class="users-list" id="users-list"></div>
+  <div class="users-create-form" id="users-create-form">
+    <h4>Create User</h4>
+    <div class="users-create-row">
+      <input type="text" id="new-username" placeholder="Username" autocomplete="off">
+      <select id="new-role">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <input type="text" id="new-display-name" placeholder="Display name (optional)" autocomplete="off">
+    <div class="users-create-row">
+      <input type="password" id="new-password" placeholder="Password (min 8 chars)" autocomplete="new-password">
+      <button class="users-create-btn" id="create-user-btn">Add</button>
+    </div>
+    <div class="users-error" id="users-error"></div>
   </div>
 </div>
 
@@ -1188,6 +1416,7 @@
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       Reset
     </button>
+    <button class="manage-users-btn" id="manage-users-btn" title="Manage users">👥 Users</button>
     <button class="logout-btn" id="logout-btn" title="Sign out" style="display:none">Sign out</button>
   </div>
 </header>
@@ -1344,9 +1573,9 @@ fontLink.href = fontHref;
 document.head.appendChild(fontLink);
 const API = window.location.origin;
 
-// ── Auth: token stored in sessionStorage (or localStorage if "remember me")
-// Never in URL params (visible in browser history).
+// ── Auth ──────────────────────────────────────────────────────────────
 let TOKEN = sessionStorage.getItem('ab-token') || localStorage.getItem('ab-token') || '';
+let currentUser = null;
 
 function saveToken(token, remember) {
   TOKEN = token;
@@ -1354,91 +1583,233 @@ function saveToken(token, remember) {
   if (remember) localStorage.setItem('ab-token', token);
   else localStorage.removeItem('ab-token');
 }
-
 function clearToken() {
   TOKEN = '';
   sessionStorage.removeItem('ab-token');
   localStorage.removeItem('ab-token');
+  currentUser = null;
+}
+
+async function getAuthMode() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    return d.auth || 'open';
+  } catch { return 'open'; }
+}
+
+async function loginWithCredentials(username, password, remember) {
+  const r = await fetch(API + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail || 'Login failed');
+  }
+  const d = await r.json();
+  saveToken(d.token, remember);
+  currentUser = d.user;
+  return d.user;
 }
 
 async function validateToken(token) {
-  // Hit /agents (a protected endpoint) — 200 = valid, 401 = wrong/missing token
-  const r = await fetch(API + '/agents', {
-    headers: token ? { 'X-AgentBridge-Token': token } : {},
-  });
-  return r.ok;
+  try {
+    const r = await fetch(API + '/agents', {
+      headers: token ? { 'X-AgentBridge-Token': token } : {},
+    });
+    if (r.ok) {
+      // Try to load current user
+      const me = await fetch(API + '/auth/me', { headers: { 'X-AgentBridge-Token': token } });
+      if (me.ok) currentUser = await me.json();
+      return true;
+    }
+    return false;
+  } catch { return false; }
 }
 
+// ── Auth init ─────────────────────────────────────────────────────────
 async function initAuth() {
   const loginScreen = document.getElementById('login-screen');
   const loginBtn = document.getElementById('login-btn');
-  const loginInput = document.getElementById('login-token-input');
-  const loginError = document.getElementById('login-error');
+  const usernameInput = document.getElementById('login-username-input');
+  const passwordInput = document.getElementById('login-password-input');
   const loginRemember = document.getElementById('login-remember');
+  const loginError = document.getElementById('login-error');
+  const loginTokenForm = document.getElementById('login-token-form');
+  const loginUsersForm = document.getElementById('login-users-form');
+  const loginTitle = document.getElementById('login-title');
+  const loginTokenBtn = document.getElementById('login-token-btn');
+  const loginTokenInput = document.getElementById('login-token-input');
+  const loginTokenRemember = document.getElementById('login-remember-token');
+  const loginTokenError = document.getElementById('login-token-error');
   const logoutBtn = document.getElementById('logout-btn');
+  const manageUsersBtn = document.getElementById('manage-users-btn');
 
-  async function tryConnect(token, remember) {
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Connecting…';
-    loginError.textContent = '';
-    const ok = await validateToken(token);
-    if (ok) {
-      saveToken(token, remember);
-      loginScreen.classList.remove('visible');
-      logoutBtn.style.display = '';
-      // Remove token from URL if it was there (legacy)
-      if (window.location.search.includes('token=')) {
-        history.replaceState(null, '', window.location.pathname);
-      }
-      startApp();
-    } else {
-      loginError.textContent = 'Invalid token. Check AGENTBRIDGE_TOKEN on the server.';
-      loginBtn.disabled = false;
-      loginBtn.textContent = 'Connect';
-    }
+  function showDashboard() {
+    loginScreen.classList.remove('visible');
+    logoutBtn.style.display = '';
+    if (currentUser?.role === 'admin') manageUsersBtn.style.display = '';
+    startApp();
   }
 
-  loginBtn.addEventListener('click', () => {
-    const token = loginInput.value.trim();
-    if (!token) { loginError.textContent = 'Please enter a token.'; return; }
-    tryConnect(token, loginRemember.checked);
+  // Users login submit
+  loginBtn.addEventListener('click', async () => {
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+    if (!username || !password) { loginError.textContent = 'Enter username and password.'; return; }
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in…';
+    loginError.textContent = '';
+    try {
+      await loginWithCredentials(username, password, loginRemember.checked);
+      showDashboard();
+    } catch (e) {
+      loginError.textContent = e.message;
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign in';
+    }
   });
-  loginInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') loginBtn.click();
+  passwordInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginBtn.click(); });
+  usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') passwordInput.focus(); });
+
+  // Token login submit (legacy mode)
+  loginTokenBtn.addEventListener('click', async () => {
+    const token = loginTokenInput.value.trim();
+    if (!token) { loginTokenError.textContent = 'Please enter a token.'; return; }
+    loginTokenBtn.disabled = true;
+    loginTokenBtn.textContent = 'Connecting…';
+    loginTokenError.textContent = '';
+    const ok = await validateToken(token);
+    if (ok) {
+      saveToken(token, loginTokenRemember.checked);
+      showDashboard();
+    } else {
+      loginTokenError.textContent = 'Invalid token. Check AGENTBRIDGE_TOKEN on the server.';
+      loginTokenBtn.disabled = false;
+      loginTokenBtn.textContent = 'Connect';
+    }
   });
-  logoutBtn.addEventListener('click', () => {
+  loginTokenInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginTokenBtn.click(); });
+
+  logoutBtn.addEventListener('click', async () => {
+    if (TOKEN) {
+      try { await fetch(API + '/auth/logout', { method: 'POST', headers: { 'X-AgentBridge-Token': TOKEN } }); } catch {}
+    }
     clearToken();
     location.reload();
   });
 
-  // If we already have a stored token, validate silently and boot
+  // Manage users panel
+  manageUsersBtn.addEventListener('click', () => {
+    const panel = document.getElementById('users-panel');
+    panel.classList.toggle('visible');
+    if (panel.classList.contains('visible')) loadUsers();
+  });
+  document.getElementById('users-panel-close').addEventListener('click', () => {
+    document.getElementById('users-panel').classList.remove('visible');
+  });
+
+  async function loadUsers() {
+    const list = document.getElementById('users-list');
+    list.innerHTML = '<div style="padding:12px 16px;color:var(--fg-dim);font-size:13px">Loading…</div>';
+    try {
+      const r = await fetch(API + '/users', { headers: { 'X-AgentBridge-Token': TOKEN } });
+      const users = await r.json();
+      list.innerHTML = '';
+      users.forEach(u => {
+        const row = document.createElement('div');
+        row.className = 'user-row';
+        const initial = (u.display_name || u.username).charAt(0).toUpperCase();
+        const isMe = currentUser?.id === u.id;
+        row.innerHTML = `
+          <div class="user-avatar">${initial}</div>
+          <div class="user-info">
+            <div class="user-name">${u.display_name || u.username}${isMe ? ' <span style="color:var(--fg-dim);font-size:11px">(you)</span>' : ''}</div>
+            <div class="user-meta">@${u.username}</div>
+          </div>
+          <span class="user-role-badge ${u.role}">${u.role}</span>
+          ${!isMe ? `<button class="user-delete-btn" data-id="${u.id}" title="Delete user">🗑</button>` : ''}
+        `;
+        list.appendChild(row);
+      });
+      list.querySelectorAll('.user-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this user?')) return;
+          const r = await fetch(API + '/users/' + btn.dataset.id, {
+            method: 'DELETE',
+            headers: { 'X-AgentBridge-Token': TOKEN },
+          });
+          if (r.ok) loadUsers();
+        });
+      });
+    } catch (e) {
+      list.innerHTML = '<div style="padding:12px 16px;color:var(--red);font-size:13px">Failed to load users</div>';
+    }
+  }
+
+  document.getElementById('create-user-btn').addEventListener('click', async () => {
+    const username = document.getElementById('new-username').value.trim();
+    const password = document.getElementById('new-password').value;
+    const displayName = document.getElementById('new-display-name').value.trim();
+    const role = document.getElementById('new-role').value;
+    const errEl = document.getElementById('users-error');
+    errEl.textContent = '';
+    if (!username || !password) { errEl.textContent = 'Username and password required.'; return; }
+    if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+    const r = await fetch(API + '/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-AgentBridge-Token': TOKEN },
+      body: JSON.stringify({ username, password, display_name: displayName, role }),
+    });
+    if (r.ok) {
+      document.getElementById('new-username').value = '';
+      document.getElementById('new-password').value = '';
+      document.getElementById('new-display-name').value = '';
+      errEl.textContent = '';
+      loadUsers();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      errEl.textContent = d.detail || 'Failed to create user';
+    }
+  });
+
+  // ── Startup auth flow ─────────────────────────────────────────────
+  const authMode = await getAuthMode();
+
   if (TOKEN) {
     const ok = await validateToken(TOKEN);
     if (ok) {
-      logoutBtn.style.display = '';
-      startApp();
-      return;
+      showDashboard();
     } else {
-      clearToken(); // stored token no longer valid
+      clearToken();
+      if (authMode === 'open') {
+        showDashboard();
+      } else if (authMode === 'token') {
+        loginUsersForm.style.display = 'none';
+        loginTokenForm.style.display = '';
+        loginTitle.textContent = 'Enter your access token to continue';
+        loginScreen.classList.add('visible');
+        loginTokenInput.focus();
+      } else {
+        loginScreen.classList.add('visible');
+        usernameInput.focus();
+      }
     }
+  } else if (authMode === 'open') {
+    showDashboard();
+  } else if (authMode === 'token') {
+    loginUsersForm.style.display = 'none';
+    loginTokenForm.style.display = '';
+    loginTitle.textContent = 'Enter your access token to continue';
+    loginScreen.classList.add('visible');
+    loginTokenInput.focus();
+  } else {
+    // 'users' mode
+    loginScreen.classList.add('visible');
+    usernameInput.focus();
   }
-  // Also accept legacy ?token= URL param (one-time migration)
-  const urlToken = new URLSearchParams(window.location.search).get('token');
-  if (urlToken) {
-    loginInput.value = urlToken;
-    tryConnect(urlToken, false);
-    return;
-  }
-  // Show login if no token set and server has no auth (open server)
-  const open = await validateToken('');
-  if (open) {
-    // Server has no auth configured — skip login
-    logoutBtn.style.display = 'none';
-    startApp();
-    return;
-  }
-  loginScreen.classList.add('visible');
-  loginInput.focus();
 }
 let currentThread = null;
 let agents = [];
@@ -1563,13 +1934,14 @@ function renderAgents() {
   el.innerHTML = agents.map(a => {
     const color = agentColor(a.name);
     const caps = (a.capabilities || []).slice(0, 2).join(', ');
+    const icon = a.agent_type === 'human' ? '👤' : '🤖';
     return `<div class="agent-item" data-name="${esc(a.name)}">
       <div class="avatar" style="background:${color}22; color:${color}">
         ${esc(initials(a.name))}
         <div class="avatar-badge ${a.status || 'online'}"></div>
       </div>
       <div class="agent-info">
-        <div class="agent-name">${esc(a.name)}</div>
+        <div class="agent-name">${icon} ${esc(a.name)}</div>
         <div class="agent-sub">${a.working_on ? esc(a.working_on) : esc(a.role || '')}</div>
         ${caps ? `<div class="agent-cap">${esc(caps)}</div>` : ''}
       </div>

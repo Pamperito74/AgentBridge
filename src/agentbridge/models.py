@@ -16,6 +16,7 @@ class Agent(BaseModel):
     status: str = "online"  # online | busy | idle
     working_on: str = ""
     capabilities: list[str] = Field(default_factory=list)
+    agent_type: str = "bot"  # 'bot' | 'human'
     connected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

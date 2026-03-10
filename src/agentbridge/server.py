@@ -137,7 +137,18 @@ def _try_ws_broadcast(message: dict, exclude: str | None = None):
 async def lifespan(app: FastAPI):
     global _uvicorn_loop
     _uvicorn_loop = asyncio.get_running_loop()
-    get_store()
+    s = get_store()
+    # Bootstrap admin account on first run
+    admin_user = os.environ.get("AGENTBRIDGE_ADMIN_USER", "admin")
+    admin_pass = os.environ.get("AGENTBRIDGE_ADMIN_PASSWORD", "changeme")
+    created = s.bootstrap_admin(admin_user, admin_pass)
+    if created:
+        logger.info("=" * 60)
+        logger.info("First run: admin account created")
+        logger.info("  Username: %s", admin_user)
+        logger.info("  Password: %s", admin_pass)
+        logger.info("  Change password after first login!")
+        logger.info("=" * 60)
     yield
     global store
     with _store_lock:
@@ -153,12 +164,28 @@ http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
 async def auth_and_logging_middleware(request: Request, call_next):
     started = time.perf_counter()
     path = request.url.path
-    # /ui and static assets are always public — the dashboard JS handles auth client-side
-    _public = {"/health", "/ui", "/favicon.ico"}
-    if _auth_token and path not in _public:
+    _public = {"/health", "/ui", "/favicon.ico", "/auth/login"}
+    request.state.user = None
+    request.state.is_admin = False
+
+    if path not in _public:
         supplied = request.headers.get("x-agentbridge-token") or request.query_params.get("token")
-        if supplied != _auth_token:
-            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+        if supplied:
+            # Check user session token first
+            session_user = await asyncio.to_thread(get_store().get_session_user, supplied)
+            if session_user:
+                request.state.user = session_user
+                request.state.is_admin = session_user["role"] == "admin"
+            elif _auth_token and supplied == _auth_token:
+                # Backward-compat: AGENTBRIDGE_TOKEN for agents/scripts
+                request.state.is_admin = True
+            else:
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+        else:
+            # No token supplied — allow only on open servers (no token AND no users)
+            if _auth_token or await asyncio.to_thread(get_store().has_any_users):
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
     response = await call_next(request)
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info("%s %s %s %sms", request.method, path, response.status_code, elapsed_ms)
@@ -169,6 +196,7 @@ class RegisterAgentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     role: str = Field(default="", max_length=512)
     capabilities: list[str] = Field(default_factory=list)
+    agent_type: Literal["bot", "human"] = "bot"
 
 
 class HeartbeatRequest(BaseModel):
@@ -219,6 +247,22 @@ class ClearBoardRequest(BaseModel):
     include_threads: bool = True
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=1024)
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=128, pattern=r'^[\w.-]+$')
+    password: str = Field(min_length=8, max_length=1024)
+    display_name: str = Field(default="", max_length=256)
+    role: Literal["admin", "member"] = "member"
+
+class UpdateUserRequest(BaseModel):
+    display_name: str | None = Field(default=None, max_length=256)
+    role: Literal["admin", "member"] | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=1024)
+
+
 class CursorRequest(BaseModel):
     agent_name: str = Field(min_length=1, max_length=128)
     thread: str = Field(default="general", min_length=1, max_length=128)
@@ -230,7 +274,7 @@ class CursorRequest(BaseModel):
 
 @http_app.post("/agents")
 async def http_register_agent(body: RegisterAgentRequest):
-    agent = await get_store().register_agent_async(body.name, body.role, body.capabilities)
+    agent = await get_store().register_agent_async(body.name, body.role, body.capabilities, agent_type=body.agent_type)
     result = agent.model_dump(mode="json")
     _broadcast_sse("agent_joined", result)
     return result
@@ -580,8 +624,90 @@ def serve_dashboard():
 # --- Health ---
 
 @http_app.get("/health")
-def health():
-    return {"status": "ok", "version": "0.3.0"}
+async def health():
+    has_users = await asyncio.to_thread(get_store().has_any_users)
+    if has_users:
+        auth_mode = "users"
+    elif _auth_token:
+        auth_mode = "token"
+    else:
+        auth_mode = "open"
+    return {"status": "ok", "version": "0.4.0", "auth": auth_mode}
+
+
+# ── Auth endpoints ────────────────────────────────────────────────────
+
+@http_app.post("/auth/login")
+async def auth_login(body: LoginRequest):
+    user = await asyncio.to_thread(get_store().authenticate_user, body.username, body.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = await asyncio.to_thread(get_store().create_session, user["id"])
+    return {"token": token, "user": user}
+
+
+@http_app.post("/auth/logout")
+async def auth_logout(request: Request):
+    supplied = request.headers.get("x-agentbridge-token") or request.query_params.get("token")
+    if supplied:
+        await asyncio.to_thread(get_store().delete_session, supplied)
+    return {"ok": True}
+
+
+@http_app.get("/auth/me")
+async def auth_me(request: Request):
+    if request.state.user:
+        return request.state.user
+    # Token-auth users (AGENTBRIDGE_TOKEN) get a synthetic profile
+    return {"id": None, "username": "agent", "display_name": "Agent", "role": "admin"}
+
+
+# ── User management (admin only) ──────────────────────────────────────
+
+def _assert_admin(request: Request):
+    if not request.state.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@http_app.get("/users")
+async def list_users(request: Request):
+    _assert_admin(request)
+    return await asyncio.to_thread(get_store().list_users)
+
+
+@http_app.post("/users", status_code=201)
+async def create_user(body: CreateUserRequest, request: Request):
+    _assert_admin(request)
+    try:
+        user = await asyncio.to_thread(
+            get_store().create_user, body.username, body.password, body.display_name, body.role
+        )
+    except Exception as e:
+        if "UNIQUE constraint" in str(e):
+            raise HTTPException(status_code=409, detail="Username already exists")
+        raise HTTPException(status_code=500, detail=str(e))
+    return user
+
+
+@http_app.patch("/users/{user_id}")
+async def update_user(user_id: str, body: UpdateUserRequest, request: Request):
+    _assert_admin(request)
+    user = await asyncio.to_thread(
+        get_store().update_user, user_id, body.display_name, body.role, body.password
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@http_app.delete("/users/{user_id}", status_code=204)
+async def delete_user(user_id: str, request: Request):
+    _assert_admin(request)
+    if request.state.user and request.state.user["id"] == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    deleted = await asyncio.to_thread(get_store().delete_user, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
 
 
 # --- WebSocket ---
