@@ -113,30 +113,72 @@
   /* ── Resize handles ── */
   .rz-sidebar {
     grid-column: 2; grid-row: 2;
-    background: var(--border);
+    background: var(--border-light);
     cursor: col-resize;
-    transition: background 0.15s;
+    transition: background 0.15s, width 0.15s;
     z-index: 10;
+    position: relative;
+  }
+  .rz-sidebar::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px; height: 32px;
+    border-radius: 2px;
+    background: var(--fg-dim);
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    pointer-events: none;
   }
   .rz-sidebar:hover, .rz-sidebar.active { background: var(--accent); }
+  .rz-sidebar:hover::after, .rz-sidebar.active::after { opacity: 0; }
 
   .rz-compose {
-    height: 4px;
-    background: var(--border);
+    height: 6px;
+    background: var(--border-light);
     cursor: row-resize;
     flex-shrink: 0;
     transition: background 0.15s;
+    position: relative;
+  }
+  .rz-compose::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    height: 2px; width: 32px;
+    border-radius: 2px;
+    background: var(--fg-dim);
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    pointer-events: none;
   }
   .rz-compose:hover, .rz-compose.active { background: var(--accent); }
+  .rz-compose:hover::after, .rz-compose.active::after { opacity: 0; }
 
   .rz-sidebar-split {
-    height: 4px;
-    background: var(--border);
+    height: 6px;
+    background: var(--border-light);
     cursor: row-resize;
     flex-shrink: 0;
     transition: background 0.15s;
+    position: relative;
+  }
+  .rz-sidebar-split::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    height: 2px; width: 24px;
+    border-radius: 2px;
+    background: var(--fg-dim);
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    pointer-events: none;
   }
   .rz-sidebar-split:hover, .rz-sidebar-split.active { background: var(--accent); }
+  .rz-sidebar-split:hover::after, .rz-sidebar-split.active::after { opacity: 0; }
 
   /* ── Header ── */
   header {
@@ -1319,10 +1361,25 @@ async function clearBoard(includeThreads = true) {
 }
 
 // ── Send
+// ── Input history (ArrowUp/Down to recall sent messages, like a terminal)
+let inputHistory = JSON.parse(localStorage.getItem('ab-input-history') || '[]');
+let historyIdx = -1;
+let savedDraft = '';
+
+function pushHistory(content) {
+  if (!content) return;
+  if (inputHistory[0] === content) return; // no duplicate consecutive entries
+  inputHistory.unshift(content);
+  if (inputHistory.length > 100) inputHistory = inputHistory.slice(0, 100);
+  localStorage.setItem('ab-input-history', JSON.stringify(inputHistory));
+  historyIdx = -1;
+}
+
 async function sendMessage() {
   const ta = document.getElementById('msg-input');
   const content = ta.value.trim();
   if (!content) return;
+  pushHistory(content);
   const sender = document.getElementById('sender-input').value.trim() || 'dashboard';
   const recipient = document.getElementById('recipient-select').value || null;
   const thread = document.getElementById('thread-select').value || 'general';
@@ -1355,11 +1412,12 @@ async function sendMessage() {
 
 document.getElementById('send-btn').onclick = sendMessage;
 
-// Auto-resize textarea
+// Auto-resize textarea + reset history navigation on manual input
 const msgTA = document.getElementById('msg-input');
 msgTA.addEventListener('input', () => {
   msgTA.style.height = 'auto';
   msgTA.style.height = Math.min(msgTA.scrollHeight, 120) + 'px';
+  historyIdx = -1; // typing resets history navigation
 });
 msgTA.addEventListener('keydown', e => {
   if (mentionPopup.classList.contains('visible')) {
@@ -1368,7 +1426,32 @@ msgTA.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionActiveIndex); return; }
     if (e.key === 'Escape')     { hideMentionPopup(); return; }
   }
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
+  // History navigation: ArrowUp when cursor is at start of first line
+  if (e.key === 'ArrowUp' && inputHistory.length > 0) {
+    const atTopLine = msgTA.selectionStart === 0 || !msgTA.value.substring(0, msgTA.selectionStart).includes('\n');
+    if (atTopLine) {
+      e.preventDefault();
+      if (historyIdx === -1) savedDraft = msgTA.value;
+      if (historyIdx < inputHistory.length - 1) {
+        historyIdx++;
+        msgTA.value = inputHistory[historyIdx];
+        msgTA.setSelectionRange(0, 0);
+      }
+      return;
+    }
+  }
+  if (e.key === 'ArrowDown' && historyIdx > -1) {
+    const atBottomLine = !msgTA.value.substring(msgTA.selectionStart).includes('\n');
+    if (atBottomLine) {
+      e.preventDefault();
+      historyIdx--;
+      const val = historyIdx === -1 ? savedDraft : inputHistory[historyIdx];
+      msgTA.value = val;
+      msgTA.setSelectionRange(val.length, val.length);
+      return;
+    }
+  }
 });
 // Fallback for cases where textarea keydown is swallowed by overlays
 document.addEventListener('keydown', e => {
