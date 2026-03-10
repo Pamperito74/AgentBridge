@@ -1181,8 +1181,8 @@ function clearToken() {
 }
 
 async function validateToken(token) {
-  // Hit /health with the token — 200 = valid, 401 = wrong token, no token set = always 200
-  const r = await fetch(API + '/health', {
+  // Hit /agents (a protected endpoint) — 200 = valid, 401 = wrong/missing token
+  const r = await fetch(API + '/agents', {
     headers: token ? { 'X-AgentBridge-Token': token } : {},
   });
   return r.ok;
