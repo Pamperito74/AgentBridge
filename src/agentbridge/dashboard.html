@@ -4,55 +4,73 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgentBridge</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2347d6b3'/%3E%3Cstop offset='1' stop-color='%23ffb86b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%23121827'/%3E%3Ccircle cx='22' cy='22' r='6' fill='url(%23g)'/%3E%3Ccircle cx='42' cy='22' r='6' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='42' r='7' fill='url(%23g)'/%3E%3Cpath d='M28 26 L36 26 L32 36 Z' fill='%23ffffff' opacity='0.9'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2347d6b3'/%3E%3Cstop offset='1' stop-color='%23ffb86b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='%23121827'/%3E%3Ccircle cx='22' cy='22' r='6' fill='url(%23g)'/%3E%3Ccircle cx='42' cy='22' r='6' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='42' r='7' fill='url(%23g)'/%3E%3Cpath d='M28 26 L36 26 L32 36 Z' fill='%23ffffff' opacity='0.9'/%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #0d0d14;
-    --bg-card: #13131e;
-    --bg-hover: #1a1a28;
-    --bg-input: #1e1e2e;
-    --border: #252535;
-    --border-light: #2e2e42;
-    --fg: #e2e2f0;
-    --fg-dim: #6b6b85;
-    --fg-mid: #9898b0;
-    --accent: #7c5cfc;
-    --accent-dim: #5a3fd4;
-    --accent-glow: rgba(124,92,252,0.15);
-    --green: #34d399;
-    --green-dim: rgba(52,211,153,0.12);
-    --yellow: #fbbf24;
-    --yellow-dim: rgba(251,191,36,0.12);
-    --red: #f87171;
-    --red-dim: rgba(248,113,113,0.12);
-    --blue: #60a5fa;
-    --blue-dim: rgba(96,165,250,0.12);
-    --radius: 10px;
-    --radius-sm: 6px;
-    --sidebar: 240px;
-    --compose-h: 110px;
-    --agents-h: 200px;
+    --bg: #0c1018;
+    --bg-elev: #0f1420;
+    --bg-card: #121827;
+    --bg-hover: #192133;
+    --bg-input: #111827;
+    --border: #222a3a;
+    --border-light: #2b364d;
+    --fg: #e7ecf4;
+    --fg-dim: #7c879b;
+    --fg-mid: #a3afc4;
+    --accent: #47d6b3;
+    --accent-dim: #2fa387;
+    --accent-glow: rgba(71,214,179,0.16);
+    --accent-2: #ffb86b;
+    --accent-2-dim: #f09a3e;
+    --green: #38e0a3;
+    --green-dim: rgba(56,224,163,0.12);
+    --yellow: #f5c85c;
+    --yellow-dim: rgba(245,200,92,0.12);
+    --red: #ff7a7a;
+    --red-dim: rgba(255,122,122,0.12);
+    --blue: #77b8ff;
+    --blue-dim: rgba(119,184,255,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --sidebar: 260px;
+    --compose-h: 120px;
+    --agents-h: 220px;
+    --shadow-1: 0 8px 24px rgba(6,10,18,0.4);
+    --shadow-2: 0 16px 40px rgba(6,10,18,0.6);
+    --font-size: 14px;
+    --footer-h: 84px;
+    --fs-xxs: calc(var(--font-size) * 0.71);
+    --fs-xs: calc(var(--font-size) * 0.79);
+    --fs-sm: calc(var(--font-size) * 0.86);
+    --fs-md: calc(var(--font-size) * 1);
+    --fs-lg: calc(var(--font-size) * 1.14);
+    --fs-xl: calc(var(--font-size) * 1.29);
   }
   :root[data-theme="light"] {
-    --bg: #f4f4f8;
+    --bg: #f5f7fb;
+    --bg-elev: #edf2f7;
     --bg-card: #ffffff;
-    --bg-hover: #f0f0f6;
-    --bg-input: #f7f7fb;
-    --border: #e2e2ec;
-    --border-light: #d0d0de;
-    --fg: #1a1a2e;
-    --fg-dim: #8888a8;
-    --fg-mid: #5555778;
-    --accent: #6c4ff0;
-    --accent-dim: #4f34c8;
-    --accent-glow: rgba(108,79,240,0.10);
-    --green: #10b981;
-    --green-dim: rgba(16,185,129,0.10);
-    --yellow: #d97706;
-    --yellow-dim: rgba(217,119,6,0.10);
-    --red: #ef4444;
-    --red-dim: rgba(239,68,68,0.10);
-    --blue: #3b82f6;
-    --blue-dim: rgba(59,130,246,0.10);
+    --bg-hover: #eef3fb;
+    --bg-input: #f7f9fc;
+    --border: #dde3ee;
+    --border-light: #ccd6e5;
+    --fg: #0f172a;
+    --fg-dim: #6b7484;
+    --fg-mid: #4b5565;
+    --accent: #1bb39a;
+    --accent-dim: #139c86;
+    --accent-glow: rgba(27,179,154,0.12);
+    --accent-2: #f59f45;
+    --accent-2-dim: #df8b34;
+    --green: #12b981;
+    --green-dim: rgba(18,185,129,0.10);
+    --yellow: #d99b2b;
+    --yellow-dim: rgba(217,155,43,0.10);
+    --red: #e45252;
+    --red-dim: rgba(228,82,82,0.10);
+    --blue: #2f6fed;
+    --blue-dim: rgba(47,111,237,0.10);
   }
 
   /* Theme toggle */
@@ -61,7 +79,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--fg-mid);
-    font-size: 14px;
+    font-size: var(--fs-md);
     cursor: pointer;
     padding: 4px 8px;
     line-height: 1;
@@ -71,18 +89,26 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
   body {
-    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--fg);
     display: grid;
     grid-template-columns: var(--sidebar) 4px 1fr;
     grid-template-rows: 52px 1fr;
     height: 100vh;
-    font-size: 14px;
+    font-size: var(--fs-md);
     user-select: none;
+    letter-spacing: 0.1px;
   }
   body.resizing { cursor: col-resize; }
   body.resizing-v { cursor: row-resize; }
+  body.sidebar-collapsed {
+    grid-template-columns: 0 0 1fr;
+  }
+  body.sidebar-collapsed aside,
+  body.sidebar-collapsed .rz-sidebar {
+    display: none;
+  }
 
   /* ── Resize handles ── */
   .rz-sidebar {
@@ -116,7 +142,7 @@
   header {
     grid-column: 1 / -1;
     grid-row: 1;
-    background: var(--bg-card);
+    background: linear-gradient(90deg, var(--bg-card), var(--bg-elev));
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -129,9 +155,24 @@
     align-items: center;
     gap: 8px;
     font-weight: 700;
-    font-size: 15px;
+    font-size: var(--fs-lg);
     letter-spacing: -0.3px;
   }
+  .sidebar-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--fg);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--fs-sm);
+  }
+  .sidebar-toggle:hover { background: var(--bg-hover); }
+  .sidebar-toggle.active { border-color: var(--accent); color: var(--accent); }
   .logo-dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--green);
@@ -147,40 +188,51 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
   .agent-count {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--fg-dim);
-    background: var(--bg-input);
+    background: var(--bg-elev);
     border: 1px solid var(--border);
     padding: 3px 8px;
-    border-radius: 20px;
+    border-radius: 999px;
   }
   .agent-count span { color: var(--green); font-weight: 600; }
   .identity {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--fg-mid);
   }
   .identity input {
-    background: var(--bg-input);
+    background: var(--bg-elev);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--fg);
     padding: 4px 8px;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-family: inherit;
     width: 110px;
     outline: none;
   }
+  .font-size-select {
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    padding: 4px 8px;
+    outline: none;
+    cursor: pointer;
+  }
   .identity input:focus { border-color: var(--accent); }
   .conn-badge {
-    font-size: 11px;
+    font-size: var(--fs-xxs);
     padding: 3px 8px;
-    border-radius: 20px;
+    border-radius: 999px;
     background: var(--green-dim);
     color: var(--green);
     border: 1px solid rgba(52,211,153,0.2);
@@ -204,7 +256,7 @@
     border-top: 1px solid var(--border);
   }
   .sidebar-label {
-    font-size: 10px;
+    font-size: var(--fs-xxs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -219,7 +271,7 @@
     background: var(--bg-hover);
     border-radius: 10px;
     padding: 1px 6px;
-    font-size: 10px;
+    font-size: var(--fs-xxs);
     color: var(--fg-mid);
     font-weight: 500;
     letter-spacing: 0;
@@ -227,6 +279,171 @@
   }
   .agent-list { overflow-y: auto; height: var(--agents-h); max-height: var(--agents-h); }
   .thread-list { overflow-y: auto; }
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 10px 12px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    position: relative;
+  }
+  .user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .user-card:hover { background: var(--bg-hover); border-color: var(--border-light); }
+  .user-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0b101a;
+    font-weight: 700;
+    font-size: var(--fs-xs);
+  }
+  .user-meta { min-width: 0; }
+  .user-name { font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-sub { font-size: var(--fs-xxs); color: var(--fg-dim); }
+  .user-menu {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--footer-h) + 8px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+    padding: 10px;
+    display: block;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+    transform-origin: left bottom;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  }
+  .user-menu.visible { visibility: visible; pointer-events: auto; opacity: 1; transform: translateY(0) scale(1); }
+  .user-menu-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 6px 10px;
+  }
+  .user-menu-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0b101a;
+    font-weight: 700;
+    font-size: var(--fs-sm);
+  }
+  .user-menu-title { font-size: var(--fs-sm); font-weight: 600; }
+  .user-menu-sub { font-size: var(--fs-xxs); color: var(--fg-dim); }
+  .user-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .user-menu-item:hover { background: var(--bg-hover); }
+  .user-menu-item .ico {
+    width: 20px;
+    text-align: center;
+    color: var(--fg-mid);
+  }
+  .user-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 0;
+  }
+  .user-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .control-label {
+    font-size: var(--fs-xs);
+    color: var(--fg-mid);
+  }
+  .button-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+  }
+  .btn-icon {
+    height: 26px;
+    min-width: 26px;
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--fs-sm);
+  }
+  .btn-icon:hover { background: var(--bg-hover); }
+  .btn-icon.active { background: var(--accent-glow); color: var(--accent); }
+  .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-value {
+    min-width: 34px;
+    text-align: center;
+    font-size: var(--fs-sm);
+    color: var(--fg);
+  }
+  .theme-icons svg {
+    width: 14px;
+    height: 14px;
+  }
+  .identity-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-xs);
+    color: var(--fg-mid);
+  }
+  .identity-inline input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    padding: 4px 8px;
+    font-size: var(--fs-xs);
+    font-family: inherit;
+    width: 100%;
+    outline: none;
+  }
+  .identity-inline input:focus { border-color: var(--accent); }
 
   /* Agents */
   .agent-item {
@@ -238,13 +455,14 @@
     transition: background 0.1s;
   }
   .agent-item:hover { background: var(--bg-hover); }
+  .agent-item.active { background: var(--accent-glow); }
   .avatar {
     width: 30px; height: 30px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 700;
     flex-shrink: 0;
     position: relative;
@@ -260,15 +478,15 @@
   .avatar-badge.busy   { background: var(--yellow); }
   .avatar-badge.idle   { background: var(--fg-dim); }
   .agent-info { overflow: hidden; flex: 1; min-width: 0; }
-  .agent-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .agent-sub  { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-  .agent-cap  { font-size: 10px; color: var(--accent); background: var(--accent-glow); padding: 1px 5px; border-radius: 3px; margin-top: 2px; display: inline-block; }
+  .agent-name { font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-sub  { font-size: var(--fs-xxs); color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .agent-cap  { font-size: var(--fs-xxs); color: var(--accent); background: var(--accent-glow); padding: 2px 6px; border-radius: 4px; margin-top: 2px; display: inline-block; }
   .kick-btn {
     margin-left: auto;
     background: none;
     border: none;
     color: var(--fg-dim);
-    font-size: 12px;
+    font-size: var(--fs-xs);
     cursor: pointer;
     padding: 2px 5px;
     border-radius: 4px;
@@ -286,20 +504,20 @@
     align-items: center;
     gap: 7px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     border-radius: 0;
     transition: background 0.1s;
     color: var(--fg-mid);
   }
   .thread-item:hover { background: var(--bg-hover); color: var(--fg); }
-  .thread-item.active { background: var(--accent-glow); color: var(--accent); font-weight: 500; }
-  .thread-hash { color: var(--fg-dim); font-size: 12px; font-weight: 600; }
+  .thread-item.active { background: var(--accent-glow); color: var(--accent); font-weight: 600; }
+  .thread-hash { color: var(--fg-dim); font-size: var(--fs-xs); font-weight: 600; }
   .thread-item.active .thread-hash { color: var(--accent); }
   .thread-badge {
     margin-left: auto;
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: var(--fs-xxs);
     font-weight: 700;
     padding: 1px 5px;
     border-radius: 10px;
@@ -313,7 +531,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--bg);
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-elev) 100%);
   }
 
   /* Thread header bar */
@@ -327,12 +545,24 @@
     flex-shrink: 0;
   }
   .thread-header-name {
-    font-weight: 600;
-    font-size: 14px;
+    font-weight: 700;
+    font-size: var(--fs-md);
   }
   .thread-header-meta {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--fg-dim);
+  }
+  .thread-header-spacer { margin-left: auto; }
+  .inbox-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-xs);
+    color: var(--fg-mid);
+    user-select: none;
+  }
+  .inbox-toggle input {
+    accent-color: var(--accent);
   }
 
   /* Messages */
@@ -358,37 +588,42 @@
     gap: 8px;
     margin-bottom: 4px;
   }
-  .msg-sender { font-size: 13px; font-weight: 600; }
-  .msg-to { font-size: 12px; color: var(--blue); }
-  .msg-ts { font-size: 11px; color: var(--fg-dim); }
-  .msg-thread-tag { font-size: 11px; color: var(--fg-dim); background: var(--bg-input); padding: 1px 5px; border-radius: 3px; }
+  .msg-sender { font-size: var(--fs-sm); font-weight: 600; }
+  .msg-to { font-size: var(--fs-xs); color: var(--blue); }
+  .msg-ts { font-size: var(--fs-xxs); color: var(--fg-dim); }
+  .msg-thread-tag { font-size: var(--fs-xxs); color: var(--fg-dim); background: var(--bg-input); padding: 1px 5px; border-radius: 3px; }
 
   .msg-bubble {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     line-height: 1.6;
     word-break: break-word;
     white-space: pre-wrap;
     margin-bottom: 2px;
     position: relative;
+    box-shadow: var(--shadow-1);
+  }
+  .msg-bubble.pending {
+    opacity: 0.6;
+    border-style: dashed;
   }
   .msg-bubble.request { border-left: 3px solid var(--blue); background: color-mix(in srgb, var(--bg-card) 95%, var(--blue)); }
   .msg-bubble.alert   { border-left: 3px solid var(--red);  background: color-mix(in srgb, var(--bg-card) 95%, var(--red)); }
   .msg-bubble.status  { border-left: 3px solid var(--yellow); background: color-mix(in srgb, var(--bg-card) 95%, var(--yellow)); }
-  .msg-bubble.response { border-left: 3px solid var(--green); background: color-mix(in srgb, var(--bg-card) 95%, var(--green)); }
+  .msg-bubble.response { border-left: 3px solid var(--green); background: color-mix(in srgb, var(--bg-card) 92%, var(--green)); }
 
   .type-pill {
     display: inline-flex;
     align-items: center;
-    font-size: 10px;
+    font-size: var(--fs-xxs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 6px;
     margin-right: 6px;
     vertical-align: middle;
   }
@@ -403,7 +638,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: var(--fs-xxs);
     background: var(--bg-input);
     border: 1px solid var(--border);
     padding: 3px 8px;
@@ -414,7 +649,7 @@
   .system-msg {
     text-align: center;
     color: var(--fg-dim);
-    font-size: 11px;
+    font-size: var(--fs-xxs);
     padding: 6px;
     font-style: italic;
     margin: 4px 0;
@@ -433,20 +668,22 @@
     gap: 8px;
     color: var(--fg-dim);
   }
-  .empty-state .icon { font-size: 32px; opacity: 0.3; }
-  .empty-state p { font-size: 13px; }
+  .empty-state .icon { font-size: calc(var(--font-size) * 2.3); opacity: 0.3; }
+  .empty-state p { font-size: var(--fs-sm); }
 
   /* ── Compose ── */
   .compose {
     padding: 12px 16px 14px;
     border-top: 1px solid var(--border);
-    background: var(--bg-card);
+    background: linear-gradient(180deg, var(--bg-card), var(--bg-elev));
     display: flex;
     flex-direction: column;
     gap: 8px;
     height: var(--compose-h);
     flex-shrink: 0;
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
+    z-index: 5;
   }
   .compose-controls {
     display: flex;
@@ -454,13 +691,13 @@
     gap: 6px;
   }
   .compose-controls label {
-    font-size: 11px;
+    font-size: var(--fs-xxs);
     color: var(--fg-dim);
     margin-right: 2px;
   }
   .compose-controls select {
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -483,7 +720,7 @@
   .compose-input-wrap textarea {
     width: 100%;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -500,9 +737,9 @@
   .compose-input-wrap textarea::placeholder { color: var(--fg-dim); }
   .send-btn {
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     font-weight: 600;
-    background: var(--accent);
+    background: linear-gradient(180deg, var(--accent), var(--accent-dim));
     border: none;
     border-radius: var(--radius);
     color: #fff;
@@ -511,8 +748,9 @@
     transition: background 0.15s, transform 0.1s;
     white-space: nowrap;
     height: 42px;
+    box-shadow: var(--shadow-1);
   }
-  .send-btn:hover { background: var(--accent-dim); }
+  .send-btn:hover { filter: brightness(1.05); }
   .send-btn:active { transform: scale(0.97); }
 
   /* Mention popup */
@@ -523,7 +761,7 @@
     background: var(--bg-card);
     border: 1px solid var(--border-light);
     border-radius: var(--radius);
-    box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+    box-shadow: var(--shadow-2);
     max-height: 200px;
     overflow-y: auto;
     z-index: 20;
@@ -534,28 +772,70 @@
   .mention-option {
     padding: 8px 12px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     display: flex;
     align-items: center;
     gap: 8px;
     transition: background 0.1s;
   }
   .mention-option:hover, .mention-option.active { background: var(--bg-hover); }
-  .mo-avatar { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .mo-avatar { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: var(--fs-xxs); font-weight: 700; flex-shrink: 0; }
+
+  .muted-row {
+    padding: 8px 14px;
+    font-size: var(--fs-xs);
+    color: var(--fg-dim);
+  }
   .mo-name { font-weight: 500; }
-  .mo-role { font-size: 11px; color: var(--fg-dim); }
+  .mo-role { font-size: var(--fs-xxs); color: var(--fg-dim); }
 
   /* Scrollbar */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
+
+  .bg-orb {
+    position: fixed;
+    inset: auto;
+    width: 380px;
+    height: 380px;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.35;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .bg-orb.one {
+    left: -120px; top: 120px;
+    background: radial-gradient(circle, var(--accent), transparent 70%);
+  }
+  .bg-orb.two {
+    right: -140px; bottom: 80px;
+    background: radial-gradient(circle, var(--accent-2), transparent 70%);
+  }
+
+  @media (max-width: 900px) {
+    body { grid-template-columns: 200px 4px 1fr; }
+    :root { --sidebar: 200px; }
+  }
+  @media (max-width: 720px) {
+    body {
+      grid-template-columns: 1fr;
+      grid-template-rows: 52px 1fr;
+    }
+    aside, .rz-sidebar { display: none; }
+    main { grid-column: 1; }
+  }
 </style>
 </head>
 <body>
+<div class="bg-orb one"></div>
+<div class="bg-orb two"></div>
 
 <header>
   <div class="logo">
+    <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">|||</button>
     <div class="logo-dot" id="logo-dot"></div>
     AgentBridge
   </div>
@@ -563,11 +843,6 @@
     <div class="agent-count">
       <span id="agent-count-num">0</span> online
     </div>
-    <div class="identity">
-      <span>You:</span>
-      <input type="text" id="sender-input" value="dashboard" placeholder="Your name">
-    </div>
-    <button class="theme-btn" id="theme-btn" title="Toggle theme">🌙</button>
     <div class="conn-badge" id="conn-badge">Connecting</div>
   </div>
 </header>
@@ -579,13 +854,86 @@
       <span class="count" id="agent-sidebar-count">0</span>
     </div>
     <div class="agent-list" id="agent-list">
-      <div style="padding: 8px 14px; font-size: 12px; color: var(--fg-dim);">No agents online</div>
+      <div class="muted-row">No agents online</div>
     </div>
   </div>
   <div class="rz-sidebar-split" id="rz-sidebar-split"></div>
   <div class="sidebar-section" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
     <div class="sidebar-label">Threads</div>
     <div class="thread-list" id="thread-list" style="flex:1; overflow-y: auto; max-height: none;"></div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-menu" id="user-menu">
+      <div class="user-menu-header">
+        <div class="user-menu-avatar" id="user-menu-avatar">DB</div>
+        <div>
+          <div class="user-menu-title" id="user-menu-name">Org Admin</div>
+          <div class="user-menu-sub">AgentBridge</div>
+        </div>
+      </div>
+      <div class="user-divider"></div>
+      <div class="user-menu-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M4 20c1.5-4 14.5-4 16 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span>Profile</span>
+      </div>
+      <div class="user-menu-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.5"/><path d="M19.4 15a1 1 0 00.2 1.1l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1 1 0 00-1.1-.2 1 1 0 00-.6.9V20a2 2 0 11-4 0v-.1a1 1 0 00-.6-.9 1 1 0 00-1.1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1 1 0 00.2-1.1 1 1 0 00-.9-.6H4a2 2 0 110-4h.1a1 1 0 00.9-.6 1 1 0 00-.2-1.1l-.1-.1a2 2 0 112.8-2.8l.1.1a1 1 0 001.1.2 1 1 0 00.6-.9V4a2 2 0 114 0v.1a1 1 0 00.6.9 1 1 0 001.1-.2l.1-.1a2 2 0 112.8 2.8l-.1.1a1 1 0 00-.2 1.1 1 1 0 00.9.6H20a2 2 0 110 4h-.1a1 1 0 00-.9.6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span>Settings</span>
+      </div>
+      <div class="user-divider"></div>
+      <div class="identity-inline">
+        <span>You:</span>
+        <input type="text" id="sender-input" value="dashboard" placeholder="Your name">
+      </div>
+      <div class="user-controls">
+        <div class="control-row">
+          <span class="control-label">Font Size</span>
+          <div class="button-group">
+            <button class="btn-icon" id="font-dec" title="Decrease">-</button>
+            <span class="btn-value" id="font-size-value">14</span>
+            <button class="btn-icon" id="font-inc" title="Increase">+</button>
+          </div>
+        </div>
+        <div class="control-row">
+          <span class="control-label">Theme</span>
+          <div class="button-group theme-icons">
+            <button class="btn-icon" id="theme-dark" title="Dark">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A7.5 7.5 0 019.5 4a7 7 0 1010.5 10.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+            </button>
+            <button class="btn-icon" id="theme-light" title="Light">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v3M12 18.5v3M4.5 12h-3M22.5 12h-3M5.7 5.7l-2-2M20.3 20.3l-2-2M18.3 5.7l2-2M3.7 20.3l2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="btn-icon" id="theme-system" title="System">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 19h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="user-divider"></div>
+      <div class="user-menu-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M15 4h2a2 2 0 012 2v12a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 17l5-5-5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 12H4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span>Logout</span>
+      </div>
+      <div class="user-menu-item" id="clear-board-btn">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 6V4h8v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7 6l1 14h8l1-14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span>Clear board</span>
+      </div>
+    </div>
+    <div class="user-card" id="user-card">
+      <div class="user-avatar" id="user-avatar">DB</div>
+      <div class="user-meta">
+        <div class="user-name" id="user-name">Org Admin</div>
+        <div class="user-sub">AgentBridge</div>
+      </div>
+    </div>
   </div>
 </aside>
 
@@ -595,6 +943,11 @@
   <div class="thread-header">
     <div class="thread-header-name" id="thread-header-name">#all threads</div>
     <div class="thread-header-meta" id="thread-header-meta"></div>
+    <div class="thread-header-spacer"></div>
+    <label class="inbox-toggle" title="Show only messages addressed to you">
+      <input type="checkbox" id="inbox-only-toggle">
+      Inbox only
+    </label>
   </div>
   <div class="messages" id="messages">
     <div class="empty-state">
@@ -628,6 +981,11 @@
 </main>
 
 <script>
+const fontHref = 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap';
+const fontLink = document.createElement('link');
+fontLink.rel = 'stylesheet';
+fontLink.href = fontHref;
+document.head.appendChild(fontLink);
 const API = window.location.origin;
 const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let currentThread = null;
@@ -638,6 +996,11 @@ let renderedIds = new Set();
 // Group tracking for consecutive same-sender messages
 let lastGroupSender = null;
 let lastGroupRecipient = null;
+let selfName = null;
+let registerTimer = null;
+let inboxOnly = false;
+let currentFontSize = null;
+let pendingByCorrelation = new Map();
 
 // ── Palette for agent avatars
 const PALETTE = ['#7c5cfc','#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#38bdf8','#4ade80','#fb923c','#e879f9'];
@@ -680,13 +1043,68 @@ async function api(path, opts) {
   return r.json();
 }
 
+function currentSenderName() {
+  const val = (document.getElementById('sender-input').value || '').trim();
+  return val || 'dashboard';
+}
+
+function updateUserCard() {
+  const name = currentSenderName();
+  const avatar = document.getElementById('user-avatar');
+  const label = document.getElementById('user-name');
+  const menuAvatar = document.getElementById('user-menu-avatar');
+  const menuName = document.getElementById('user-menu-name');
+  if (avatar) avatar.textContent = initials(name);
+  if (label) label.textContent = name;
+  if (menuAvatar) menuAvatar.textContent = initials(name);
+  if (menuName) menuName.textContent = name;
+}
+
+async function registerSelf() {
+  const name = currentSenderName();
+  if (!name || name === selfName) return;
+  selfName = name;
+  try {
+    await api('/agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        role: 'dashboard-ui',
+        capabilities: ['dashboard'],
+      }),
+    });
+  } catch (err) {
+    // Non-fatal; UI should still work without registration
+  }
+}
+
+async function heartbeatSelf() {
+  const name = currentSenderName();
+  if (!name) return;
+  try {
+    await api(`/agents/${encodeURIComponent(name)}/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'online', working_on: '' }),
+    });
+  } catch (err) {
+    // Ignore heartbeat errors
+  }
+}
+
+function scheduleRegister() {
+  if (registerTimer) clearTimeout(registerTimer);
+  registerTimer = setTimeout(registerSelf, 500);
+}
+
 // ── Render sidebar agents
 function renderAgents() {
   const el = document.getElementById('agent-list');
   document.getElementById('agent-sidebar-count').textContent = agents.length;
   document.getElementById('agent-count-num').textContent = agents.length;
   if (!agents.length) {
-    el.innerHTML = '<div style="padding: 8px 14px; font-size: 12px; color: var(--fg-dim);">No agents online</div>';
+    el.innerHTML = '<div class="muted-row">No agents online</div>';
     updateRecipientSelect();
     return;
   }
@@ -771,6 +1189,12 @@ function updateThreadHeader() {
   document.getElementById('thread-header-meta').textContent = '';
 }
 
+function matchesInboxFilter(m) {
+  if (!inboxOnly) return true;
+  const me = currentSenderName();
+  return m.recipient && m.recipient === me;
+}
+
 // ── Render messages
 function buildMsgGroup(msgs, startIdx) {
   // Find consecutive msgs from same sender+recipient
@@ -791,12 +1215,14 @@ function buildMsgGroup(msgs, startIdx) {
   const bubbles = msgs.slice(startIdx, end).map(m => {
     const typePill = m.msg_type && m.msg_type !== 'chat'
       ? `<span class="type-pill ${m.msg_type}">${m.msg_type}</span>` : '';
+    const pendingClass = m._pending ? ' pending' : '';
+    const correlationAttr = m.correlation_id ? ` data-correlation="${esc(m.correlation_id)}"` : '';
     const content = esc(m.content).replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
     const artifacts = m.artifacts && m.artifacts.length
       ? `<div class="artifacts">${m.artifacts.map(a =>
           `<span class="artifact">${a.type === 'file' ? '📄' : a.type === 'code' ? '💻' : '🔗'} ${esc(a.content.substring(0, 60))}</span>`
         ).join('')}</div>` : '';
-    return `<div class="msg-bubble ${m.msg_type !== 'chat' ? m.msg_type : ''}" title="${absTime(m.timestamp)}">
+    return `<div class="msg-bubble ${m.msg_type !== 'chat' ? m.msg_type : ''}${pendingClass}"${correlationAttr} title="${absTime(m.timestamp)}">
       ${typePill}${content}${artifacts}
     </div>`;
   }).join('');
@@ -825,16 +1251,19 @@ async function reloadMessages() {
   renderedIds = new Set();
   lastGroupSender = null;
   lastGroupRecipient = null;
-  if (!msgs.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">◎</div><p>No messages in ${currentThread ? '#'+currentThread : 'any thread'} yet.</p></div>`;
+  const filtered = msgs.filter(matchesInboxFilter);
+  if (!filtered.length) {
+    const scope = currentThread ? '#'+currentThread : 'any thread';
+    const suffix = inboxOnly ? ' addressed to you' : '';
+    el.innerHTML = `<div class="empty-state"><div class="icon">◎</div><p>No messages in ${scope}${suffix} yet.</p></div>`;
     return;
   }
   let html = '';
   let i = 0;
-  while (i < msgs.length) {
-    const group = buildMsgGroup(msgs, i);
+  while (i < filtered.length) {
+    const group = buildMsgGroup(filtered, i);
     html += group.html;
-    for (let j = i; j < i + group.count; j++) renderedIds.add(msgs[j].id);
+    for (let j = i; j < i + group.count; j++) renderedIds.add(filtered[j].id);
     i += group.count;
   }
   el.innerHTML = html;
@@ -844,6 +1273,12 @@ async function reloadMessages() {
 function appendMessage(m) {
   if (renderedIds.has(m.id)) return;
   if (currentThread && m.thread !== currentThread) return;
+  if (!matchesInboxFilter(m)) return;
+  if (m.correlation_id && pendingByCorrelation.has(m.correlation_id)) {
+    const pendingEl = pendingByCorrelation.get(m.correlation_id);
+    if (pendingEl && pendingEl.parentElement) pendingEl.parentElement.removeChild(pendingEl);
+    pendingByCorrelation.delete(m.correlation_id);
+  }
   renderedIds.add(m.id);
   const el = document.getElementById('messages');
   // Remove empty state
@@ -851,7 +1286,13 @@ function appendMessage(m) {
   if (empty) empty.remove();
   // Build single-message group
   const group = buildMsgGroup([m], 0);
-  el.insertAdjacentHTML('beforeend', group.html);
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = group.html;
+  const node = wrapper.firstElementChild;
+  if (node) el.appendChild(node);
+  if (m._pending && m.correlation_id && node) {
+    pendingByCorrelation.set(m.correlation_id, node);
+  }
   el.scrollTop = el.scrollHeight;
 }
 
@@ -859,6 +1300,22 @@ function addSystemMsg(text) {
   const el = document.getElementById('messages');
   el.insertAdjacentHTML('beforeend', `<div class="system-msg">${esc(text)}</div>`);
   el.scrollTop = el.scrollHeight;
+}
+
+async function clearBoard(includeThreads = true) {
+  try {
+    await api('/admin/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ include_threads: includeThreads }),
+    });
+    threads = includeThreads ? [] : threads;
+    renderThreads();
+    reloadMessages();
+    addSystemMsg('Board cleared');
+  } catch (err) {
+    addSystemMsg(`Clear failed: ${err.message}`);
+  }
 }
 
 // ── Send
@@ -870,14 +1327,27 @@ async function sendMessage() {
   const recipient = document.getElementById('recipient-select').value || null;
   const thread = document.getElementById('thread-select').value || 'general';
   const msg_type = document.getElementById('type-select').value || 'chat';
+  const correlation_id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const localMsg = {
+    id: `local-${correlation_id}`,
+    sender,
+    recipient,
+    thread,
+    msg_type,
+    content,
+    correlation_id,
+    timestamp: new Date().toISOString(),
+    _pending: true,
+  };
   try {
+    ta.value = '';
+    ta.style.height = 'auto';
+    appendMessage(localMsg);
     await api('/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender, content, recipient, thread, msg_type }),
+      body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id }),
     });
-    ta.value = '';
-    ta.style.height = 'auto';
   } catch (err) {
     addSystemMsg(`Send failed: ${err.message}`);
   }
@@ -898,10 +1368,27 @@ msgTA.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionActiveIndex); return; }
     if (e.key === 'Escape')     { hideMentionPopup(); return; }
   }
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
 });
+// Fallback for cases where textarea keydown is swallowed by overlays
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+  const active = document.activeElement;
+  if (active && active.id === 'msg-input') {
+    e.preventDefault();
+    sendMessage();
+  }
+}, true);
 msgTA.addEventListener('input', handleMentionInput);
 msgTA.addEventListener('blur', () => setTimeout(hideMentionPopup, 150));
+document.getElementById('sender-input').addEventListener('input', scheduleRegister);
+document.getElementById('sender-input').addEventListener('blur', registerSelf);
+document.getElementById('sender-input').addEventListener('blur', () => { if (inboxOnly) reloadMessages(); });
+document.getElementById('sender-input').addEventListener('input', updateUserCard);
+document.getElementById('inbox-only-toggle').addEventListener('change', e => {
+  inboxOnly = e.target.checked;
+  reloadMessages();
+});
 
 // ── @mention autocomplete
 const mentionPopup = document.getElementById('mention-popup');
@@ -1033,8 +1520,22 @@ function loadSizes() {
   if (sw) root.style.setProperty('--sidebar', sw + 'px');
   if (ch) root.style.setProperty('--compose-h', ch + 'px');
   if (ah) root.style.setProperty('--agents-h', ah + 'px');
+  const fs = Number(localStorage.getItem('ab-font-size') || '14');
+  currentFontSize = String(fs);
+  root.style.setProperty('--font-size', fs + 'px');
 }
 loadSizes();
+
+const sidebarToggle = document.getElementById('sidebar-toggle');
+function applySidebarCollapsed(collapsed) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  sidebarToggle.classList.toggle('active', collapsed);
+  localStorage.setItem('ab-sidebar-collapsed', collapsed ? 'true' : 'false');
+}
+applySidebarCollapsed(localStorage.getItem('ab-sidebar-collapsed') === 'true');
+sidebarToggle.addEventListener('click', () => {
+  applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+});
 
 function makeDrag({ handle, onStart, onMove, onEnd, cursor }) {
   handle.addEventListener('mousedown', e => {
@@ -1102,24 +1603,81 @@ makeDrag({
 });
 
 // ── Theme toggle
-const themeBtn = document.getElementById('theme-btn');
+const themeDarkBtn = document.getElementById('theme-dark');
+const themeLightBtn = document.getElementById('theme-light');
+const themeSystemBtn = document.getElementById('theme-system');
 let currentTheme = localStorage.getItem('ab-theme') || 'dark';
+const systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-function applyTheme(t) {
-  currentTheme = t;
-  root.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
-  themeBtn.textContent = t === 'light' ? '🌙' : '☀️';
-  localStorage.setItem('ab-theme', t);
+function resolveTheme(mode) {
+  if (mode === 'system') return systemQuery.matches ? 'dark' : 'light';
+  return mode;
 }
+
+function updateThemeButtons() {
+  themeDarkBtn.classList.toggle('active', currentTheme === 'dark');
+  themeLightBtn.classList.toggle('active', currentTheme === 'light');
+  themeSystemBtn.classList.toggle('active', currentTheme === 'system');
+}
+
+function applyTheme(mode) {
+  currentTheme = mode;
+  const resolved = resolveTheme(mode);
+  root.setAttribute('data-theme', resolved === 'light' ? 'light' : 'dark');
+  localStorage.setItem('ab-theme', mode);
+  updateThemeButtons();
+}
+
+systemQuery.addEventListener('change', () => {
+  if (currentTheme === 'system') applyTheme('system');
+});
+
+themeDarkBtn.addEventListener('click', () => applyTheme('dark'));
+themeLightBtn.addEventListener('click', () => applyTheme('light'));
+themeSystemBtn.addEventListener('click', () => applyTheme('system'));
 applyTheme(currentTheme);
 
-themeBtn.addEventListener('click', () => {
-  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+const fontDec = document.getElementById('font-dec');
+const fontInc = document.getElementById('font-inc');
+const fontValue = document.getElementById('font-size-value');
+
+function setFontSize(value) {
+  const clamped = Math.max(12, Math.min(18, value));
+  currentFontSize = String(clamped);
+  root.style.setProperty('--font-size', clamped + 'px');
+  localStorage.setItem('ab-font-size', String(clamped));
+  fontValue.textContent = String(clamped);
+  fontDec.disabled = clamped <= 12;
+  fontInc.disabled = clamped >= 18;
+}
+
+fontDec.addEventListener('click', () => setFontSize((Number(currentFontSize) || 14) - 1));
+fontInc.addEventListener('click', () => setFontSize((Number(currentFontSize) || 14) + 1));
+setFontSize(Number(currentFontSize) || 14);
+
+const userMenu = document.getElementById('user-menu');
+const userCard = document.getElementById('user-card');
+const clearBoardBtn = document.getElementById('clear-board-btn');
+userCard.addEventListener('click', () => {
+  userMenu.classList.toggle('visible');
+});
+document.addEventListener('click', (e) => {
+  if (!userMenu.classList.contains('visible')) return;
+  if (userMenu.contains(e.target) || userCard.contains(e.target)) return;
+  userMenu.classList.remove('visible');
+});
+clearBoardBtn.addEventListener('click', () => {
+  if (!confirm('Clear all messages and threads?')) return;
+  clearBoard(true);
+  userMenu.classList.remove('visible');
 });
 
 // ── Init
 (async () => {
   try {
+    await registerSelf();
+    updateUserCard();
+    setInterval(heartbeatSelf, 30000);
     await Promise.all([
       api('/agents').then(a => { agents = a; renderAgents(); }),
       api('/threads').then(t => { threads = t; renderThreads(); }),

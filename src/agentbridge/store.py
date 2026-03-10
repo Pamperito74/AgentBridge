@@ -535,3 +535,12 @@ class MessageStore:
             self._prune_timer.cancel()
         with self._lock:
             self._conn.close()
+
+    def clear_board(self, include_threads: bool = True):
+        """Remove all messages and optionally all threads."""
+        with self._lock:
+            self._conn.execute("DELETE FROM messages")
+            self._conn.execute("DELETE FROM delivery_cursors")
+            if include_threads:
+                self._conn.execute("DELETE FROM threads")
+            self._conn.commit()

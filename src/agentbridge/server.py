@@ -117,6 +117,20 @@ def _try_ws_deliver(recipient: str, message: dict):
         pass  # WS delivery is best-effort; store already persisted
 
 
+def _try_ws_broadcast(message: dict, exclude: str | None = None):
+    """Best-effort broadcast to all WS-connected agents (non-blocking)."""
+    if _uvicorn_loop is None or not _uvicorn_loop.is_running():
+        return
+    manager = get_ws_manager()
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast(message, exclude=exclude),
+            _uvicorn_loop,
+        ).result(timeout=2)
+    except Exception:
+        pass
+
+
 # ── HTTP API (FastAPI) ──────────────────────────────────────────────
 
 @asynccontextmanager
@@ -199,6 +213,10 @@ class EventSchemaWriteRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ClearBoardRequest(BaseModel):
+    include_threads: bool = True
+
+
 class CursorRequest(BaseModel):
     agent_name: str = Field(min_length=1, max_length=128)
     thread: str = Field(default="general", min_length=1, max_length=128)
@@ -274,6 +292,9 @@ async def http_heartbeat(name: str, body: HeartbeatRequest):
 
 @http_app.post("/messages")
 async def http_send_message(body: SendMessageRequest):
+    correlation_id = body.correlation_id
+    if body.msg_type == "request" and not correlation_id:
+        correlation_id = str(uuid.uuid4())
     msg = await get_store().add_message_async(
         sender=body.sender,
         content=body.content,
@@ -281,14 +302,30 @@ async def http_send_message(body: SendMessageRequest):
         thread=body.thread,
         msg_type=body.msg_type,
         artifacts=[a.model_dump() for a in body.artifacts] if body.artifacts else None,
-        correlation_id=body.correlation_id,
+        correlation_id=correlation_id,
     )
     result = msg.model_dump(mode="json")
     _broadcast_sse("message", result)
 
-    # Real-time WS delivery to recipient if connected
-    if body.recipient:
-        _try_ws_deliver(body.recipient, {"type": "message", **result})
+    # Real-time WS delivery to agents
+    if body.msg_type == "request":
+        request_msg = {
+            "type": "request",
+            "correlation_id": correlation_id,
+            "sender": body.sender,
+            "content": body.content,
+            "thread": body.thread,
+        }
+        if body.recipient:
+            _try_ws_deliver(body.recipient, request_msg)
+        else:
+            _try_ws_broadcast(request_msg, exclude=body.sender)
+    else:
+        message_msg = {"type": "message", **result}
+        if body.recipient:
+            _try_ws_deliver(body.recipient, message_msg)
+        else:
+            _try_ws_broadcast(message_msg, exclude=body.sender)
 
     # If this is a response, resolve any pending WS future
     if body.msg_type == "response" and body.correlation_id and _uvicorn_loop:
@@ -370,6 +407,14 @@ async def http_read_events(
         since_id=since_id,
     )
     return [m.model_dump(mode="json") for m in messages]
+
+
+@http_app.post("/admin/clear")
+async def http_clear_board(body: ClearBoardRequest | None = None):
+    payload = body or ClearBoardRequest()
+    await get_store()._run_in_thread(get_store().clear_board, payload.include_threads)
+    _broadcast_sse("system", {"type": "clear", "include_threads": payload.include_threads})
+    return {"cleared": True, "include_threads": payload.include_threads}
 
 
 @http_app.get("/cursors")
