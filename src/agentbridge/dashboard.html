@@ -1094,6 +1094,14 @@
   body:not(.layout-wide) .compose-panel-title {
     display: none;
   }
+  /* messages-panel must grow to fill available space (flex:1 was on .messages before the panel wrapper was added) */
+  .messages-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
   /* In stacked mode, compose-panel has fixed height and doesn't shrink */
   body:not(.layout-wide) .compose-panel {
     height: var(--compose-h);
