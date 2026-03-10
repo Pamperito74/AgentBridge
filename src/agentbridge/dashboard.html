@@ -1372,6 +1372,64 @@
 
   /* Panel transitions */
   aside, main { transition: grid-column 0.2s ease; }
+
+  /* ── Direct Messages panel ── */
+  .dm-section {
+    flex-shrink: 0;
+  }
+  .dm-list {
+    overflow-y: auto;
+    max-height: 150px;
+  }
+  .dm-item {
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: var(--fs-sm);
+    transition: background 0.1s;
+    border-radius: var(--radius-sm);
+  }
+  .dm-item:hover { background: var(--bg-hover); }
+  .dm-item.active { background: var(--accent-glow); color: var(--accent); }
+  .dm-item .dm-avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: var(--fs-xxs); font-weight: 700; flex-shrink: 0;
+  }
+  .dm-item-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dm-badge {
+    background: var(--accent);
+    color: #000;
+    font-size: var(--fs-xxs);
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .dm-notify-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  /* Back button in thread header when in DM mode */
+  .dm-back-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    cursor: pointer;
+    font-size: var(--fs-sm);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    transition: background 0.1s, color 0.1s;
+    margin-right: 4px;
+  }
+  .dm-back-btn:hover { background: var(--bg-hover); color: var(--fg); }
 </style>
 </head>
 <body>
@@ -1586,6 +1644,15 @@
       <div class="muted-row">No agents online</div>
     </div>
   </div>
+  <div class="dm-section sidebar-section">
+    <div class="sidebar-label">
+      Direct Messages
+      <span class="count" id="dm-total-unread" style="display:none"></span>
+    </div>
+    <div class="dm-list" id="dm-list">
+      <div class="muted-row">No conversations yet</div>
+    </div>
+  </div>
   <div class="rz-sidebar-split" id="rz-sidebar-split"></div>
   <div class="sidebar-section" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
     <div class="sidebar-label">Threads</div>
@@ -1648,6 +1715,7 @@
   <div class="messages-panel" data-panel="messages">
     <div class="thread-header">
       <span class="panel-drag-handle" id="messages-drag-handle" draggable="true" title="Drag to swap panels">⠿</span>
+      <button class="dm-back-btn" id="dm-back-btn" style="display:none" title="Back to all threads">← Back</button>
       <div class="thread-header-name" id="thread-header-name">#all threads</div>
       <div class="thread-header-meta" id="thread-header-meta"></div>
       <div class="thread-header-spacer"></div>
@@ -1808,9 +1876,14 @@ async function initAuth() {
     loginScreen.classList.remove('visible');
     logoutBtn.style.display = '';
     if (currentUser?.id) {
-      // Set sender name from logged-in user's display name
+      // Set sender name from logged-in user account
       const displayName = currentUser.display_name || currentUser.username;
-      document.getElementById('sender-input').value = displayName;
+      const si = document.getElementById('sender-input');
+      si.value = displayName;
+      si.readOnly = true;
+      si.title = 'Username is tied to your login session';
+      si.style.cursor = 'default';
+      si.style.opacity = '0.65';
       // Show change password section for real accounts
       document.getElementById('change-password-section').style.display = '';
     }
@@ -2100,6 +2173,9 @@ async function initAuth() {
   }
 }
 let currentThread = null;
+let currentDmAgent = null;   // string | null — agent name of open DM conversation
+let dmUnread = {};           // { agentName: unreadCount }
+let allMessages = [];        // local message cache, kept updated by reload + SSE
 let agents = [];
 let threads = [];
 // Track rendered message ids to avoid duplicate rendering on SSE
@@ -2155,6 +2231,7 @@ async function api(path, opts) {
 }
 
 function currentSenderName() {
+  if (currentUser?.username) return currentUser.username;
   const val = (document.getElementById('sender-input').value || '').trim();
   return val || 'dashboard';
 }
@@ -2240,8 +2317,7 @@ function renderAgents() {
   el.querySelectorAll('.agent-item').forEach(item => {
     item.onclick = (e) => {
       if (e.target.closest('.kick-btn')) return;
-      document.getElementById('recipient-select').value = item.dataset.name;
-      document.getElementById('msg-input').focus();
+      openDm(item.dataset.name);
     };
   });
   el.querySelectorAll('.kick-btn').forEach(btn => {
@@ -2283,9 +2359,11 @@ function renderThreads() {
   }).join('');
   el.querySelectorAll('.thread-item').forEach(item => {
     item.onclick = () => {
+      currentDmAgent = null;
       currentThread = item.dataset.thread || null;
       updateThreadHeader();
       renderThreads();
+      renderDmList();
       reloadMessages();
     };
   });
@@ -2297,12 +2375,87 @@ function renderThreads() {
   sel.value = cur || 'general';
 }
 
+// ── DM panel
+function renderDmList() {
+  const el = document.getElementById('dm-list');
+  const unreadEl = document.getElementById('dm-total-unread');
+  const me = currentSenderName();
+  // Collect unique agents this user has exchanged DMs with
+  const dmPartners = new Set();
+  allMessages.forEach(m => {
+    if (m.recipient === me && m.sender !== me) dmPartners.add(m.sender);
+    if (m.sender === me && m.recipient && m.recipient !== me) dmPartners.add(m.recipient);
+  });
+  // Also include agents with pending unread even if not in allMessages yet
+  Object.keys(dmUnread).forEach(name => { if (dmUnread[name] > 0) dmPartners.add(name); });
+
+  const totalUnread = Object.values(dmUnread).reduce((a, b) => a + b, 0);
+  if (unreadEl) {
+    unreadEl.textContent = totalUnread || '';
+    unreadEl.style.display = totalUnread ? '' : 'none';
+  }
+
+  if (!dmPartners.size) {
+    el.innerHTML = '<div class="muted-row">No conversations yet</div>';
+    return;
+  }
+  el.innerHTML = [...dmPartners].map(name => {
+    const color = agentColor(name);
+    const unread = dmUnread[name] || 0;
+    const isActive = currentDmAgent === name;
+    return `<div class="dm-item ${isActive ? 'active' : ''}" data-name="${esc(name)}">
+      <div class="dm-avatar" style="background:${color}22; color:${color}">${esc(initials(name))}</div>
+      <span class="dm-item-name">${esc(name)}</span>
+      ${unread ? `<span class="dm-badge">${unread}</span>` : ''}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.dm-item').forEach(item => {
+    item.addEventListener('click', () => openDm(item.dataset.name));
+  });
+}
+
+function openDm(agentName) {
+  currentDmAgent = agentName;
+  currentThread = null;
+  // Clear unread for this agent
+  dmUnread[agentName] = 0;
+  // Pre-fill recipient in compose
+  document.getElementById('recipient-select').value = agentName;
+  document.getElementById('msg-input').focus();
+  updateThreadHeader();
+  renderThreads();   // deactivate thread selection
+  renderDmList();
+  reloadMessages();
+}
+
+function closeDm() {
+  currentDmAgent = null;
+  document.getElementById('recipient-select').value = '';
+  updateThreadHeader();
+  renderThreads();
+  renderDmList();
+  reloadMessages();
+}
+
 function updateThreadHeader() {
-  document.getElementById('thread-header-name').textContent = currentThread ? `#${currentThread}` : '#all threads';
-  document.getElementById('thread-header-meta').textContent = '';
+  const backBtn = document.getElementById('dm-back-btn');
+  if (currentDmAgent) {
+    document.getElementById('thread-header-name').textContent = `DM: ${currentDmAgent}`;
+    document.getElementById('thread-header-meta').textContent = '';
+    if (backBtn) backBtn.style.display = '';
+  } else {
+    document.getElementById('thread-header-name').textContent = currentThread ? `#${currentThread}` : '#all threads';
+    document.getElementById('thread-header-meta').textContent = '';
+    if (backBtn) backBtn.style.display = 'none';
+  }
 }
 
 function matchesInboxFilter(m) {
+  if (currentDmAgent) {
+    const me = currentSenderName();
+    return (m.sender === me && m.recipient === currentDmAgent)
+        || (m.sender === currentDmAgent && m.recipient === me);
+  }
   if (!inboxOnly) return true;
   const me = currentSenderName();
   return m.recipient && m.recipient === me;
@@ -2357,9 +2510,10 @@ function buildMsgGroup(msgs, startIdx) {
 }
 
 async function reloadMessages() {
-  const params = new URLSearchParams({ limit: '100' });
-  if (currentThread) params.set('thread', currentThread);
+  const params = new URLSearchParams({ limit: currentDmAgent ? '200' : '100' });
+  if (currentThread && !currentDmAgent) params.set('thread', currentThread);
   const msgs = await api('/messages?' + params);
+  allMessages = msgs;
   const el = document.getElementById('messages');
   renderedIds = new Set();
   lastGroupSender = null;
@@ -2385,6 +2539,16 @@ async function reloadMessages() {
 
 function appendMessage(m) {
   if (renderedIds.has(m.id)) return;
+  // Track in local cache
+  if (m.id && !m._pending) allMessages.push(m);
+  // DM unread tracking: incoming message directed at me, not in the currently open DM
+  const me = currentSenderName();
+  if (m.recipient === me && m.sender !== me && !m._pending) {
+    if (!currentDmAgent || currentDmAgent !== m.sender) {
+      dmUnread[m.sender] = (dmUnread[m.sender] || 0) + 1;
+      renderDmList();
+    }
+  }
   if (currentThread && m.thread !== currentThread) return;
   if (!matchesInboxFilter(m)) return;
   if (m.correlation_id && pendingByCorrelation.has(m.correlation_id)) {
@@ -2451,7 +2615,7 @@ async function sendMessage() {
   const content = ta.value.trim();
   if (!content) return;
   pushHistory(content);
-  const sender = document.getElementById('sender-input').value.trim() || 'dashboard';
+  const sender = currentSenderName();
   const recipient = document.getElementById('recipient-select').value || null;
   const thread = document.getElementById('thread-select').value || 'general';
   const msg_type = document.getElementById('type-select').value || 'chat';
@@ -2482,6 +2646,7 @@ async function sendMessage() {
 }
 
 document.getElementById('send-btn').onclick = sendMessage;
+document.getElementById('dm-back-btn').addEventListener('click', closeDm);
 
 // Reset history navigation on manual input (textarea height managed by flex)
 const msgTA = document.getElementById('msg-input');
@@ -3132,6 +3297,7 @@ async function startApp() {
     ]);
     updateThreadHeader();
     await reloadMessages();
+    renderDmList();
     connectSSE();
   } catch (err) {
     document.getElementById('conn-badge').textContent = 'Failed';

@@ -201,13 +201,19 @@ class AgentBridgeClient:
 
     def on_request(
         self, handler: Callable[[dict], Coroutine[Any, Any, Any]]
-    ) -> None:
+    ) -> Callable:
         """Register handler for incoming requests.
+
+        Can be used as a decorator or called directly:
+            agent.on_request(my_handler)
+            @agent.on_request
+            async def my_handler(msg): ...
 
         Handler should be an async function that takes a message dict
         and returns a response (str or dict).
         """
         self.request_handler = handler
+        return handler
 
     async def send_message(
         self,
@@ -247,6 +253,78 @@ class AgentBridgeClient:
     def is_connected(self) -> bool:
         """Check if connected to AgentBridge."""
         return self.ws is not None and self._running
+
+    async def _read_task_done(self) -> None:
+        """Await until the read loop task completes."""
+        if self._read_task:
+            try:
+                await self._read_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    async def run(
+        self,
+        capabilities: list[str] | None = None,
+        reconnect: bool = True,
+        backoff_initial: float = 1.0,
+        backoff_max: float = 60.0,
+    ) -> None:
+        """Connect, run, and auto-reconnect until stopped (SIGINT/SIGTERM).
+
+        This is the recommended entry point for long-running agents.
+        Register your on_request handler before calling this method.
+
+        Example:
+            agent = AgentBridgeClient("my-agent", "my role")
+
+            @agent.on_request
+            async def handle(msg):
+                return f"Got: {msg['content']}"
+
+            asyncio.run(agent.run(capabilities=["data-processing"]))
+        """
+        import signal
+
+        stop_event = asyncio.Event()
+
+        def _handle_signal() -> None:
+            stop_event.set()
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, _handle_signal)
+            except NotImplementedError:
+                pass  # Windows does not support add_signal_handler
+
+        delay = backoff_initial
+        while not stop_event.is_set():
+            try:
+                await self.connect(capabilities=capabilities)
+                delay = backoff_initial  # reset backoff on successful connect
+
+                read_done = asyncio.ensure_future(self._read_task_done())
+                stop_done = asyncio.ensure_future(stop_event.wait())
+                await asyncio.wait([read_done, stop_done], return_when=asyncio.FIRST_COMPLETED)
+                read_done.cancel()
+                stop_done.cancel()
+            except Exception as e:
+                logger.warning(f"Connection error: {e}")
+            finally:
+                try:
+                    await self.disconnect()
+                except Exception:
+                    pass
+
+            if not reconnect or stop_event.is_set():
+                break
+
+            logger.info(f"Reconnecting in {delay:.1f}s…")
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=delay)
+            except asyncio.TimeoutError:
+                pass
+            delay = min(delay * 2, backoff_max)
 
 
 async def example_usage():
