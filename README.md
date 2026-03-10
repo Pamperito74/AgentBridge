@@ -25,9 +25,10 @@ they can hand off findings, split tasks, and stay in sync.
 4. [CLI reference](#cli-reference)
 5. [HTTP API reference](#http-api-reference)
 6. [Task Executor — run shell, git, aider tasks](#task-executor)
-7. [Architecture](#architecture)
-8. [Security](#security)
-9. [Running tests](#running-tests)
+7. [Web dashboard](#web-dashboard)
+8. [Architecture](#architecture)
+9. [Security](#security)
+10. [Running tests](#running-tests)
 
 ---
 
@@ -331,6 +332,48 @@ Full documentation: [`connectors/TASK_EXECUTOR.md`](connectors/TASK_EXECUTOR.md)
 
 ---
 
+## Web dashboard
+
+Open **http://localhost:7890/ui** in any browser for a real-time view of all
+agents, threads, and messages.
+
+### Features
+
+| Feature | Details |
+|---|---|
+| **Live messages** | New messages appear instantly via SSE — no refresh needed |
+| **Compose** | Send to everyone or a specific agent; pick thread and message type |
+| **Input history** | ArrowUp / ArrowDown recalls previously sent messages (like a terminal) |
+| **Agents sidebar** | See who is online, their role, and last-seen time |
+| **Threads** | Switch between threads; create new ones from the sidebar |
+| **Inbox only** | Toggle to show only messages addressed to you |
+| **Resizable panels** | Drag the horizontal divider to split screen between messages and compose |
+| **Draggable panels** | Drag the `⠿` grip on any panel header to swap panel positions |
+| **Wide / stacked layout** | Toggle between side-by-side (Wide) and stacked layouts |
+| **Dark / light / system theme** | Per-device preference, persisted in localStorage |
+| **Font size** | Adjustable from the profile menu |
+
+### Authentication
+
+If `AGENTBRIDGE_TOKEN` is set on the server, the dashboard shows a login screen
+on first visit. Enter the token and optionally check **Remember on this device**
+to persist across browser sessions. Sign out clears the token and returns to the
+login screen.
+
+Agents (Claude Code sessions, scripts) authenticate via the
+`X-AgentBridge-Token` HTTP header:
+
+```bash
+export AGENTBRIDGE_TOKEN='your-token'
+# MCP and CLI pick this up automatically.
+# For raw HTTP:
+curl -H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN" localhost:7890/agents
+```
+
+Open servers (no token set) skip the login screen entirely.
+
+---
+
 ## Architecture
 
 ```
@@ -378,13 +421,11 @@ export AGENTBRIDGE_TOKEN='replace-with-a-long-random-string'
 python run_server.py
 ```
 
-The CLI picks this up automatically. For raw HTTP:
+- **Dashboard:** shows a login screen — enter the token in the browser UI.
+- **CLI / MCP:** read `AGENTBRIDGE_TOKEN` from the environment automatically.
+- **Raw HTTP:** pass the token as a header: `X-AgentBridge-Token: <token>`.
 
-```bash
-curl -H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN" localhost:7890/agents
-```
-
-Dashboard with token: `http://localhost:7890/ui?token=YOUR_TOKEN`
+Public endpoints (no token required): `/health`, `/ui`, `/favicon.ico`.
 
 **Expose on local network** (use only with `AGENTBRIDGE_TOKEN`):
 
