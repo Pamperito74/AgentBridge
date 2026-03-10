@@ -1026,146 +1026,149 @@
   }
   .logout-btn:hover { border-color: var(--red); color: var(--red); }
 
-  /* User management panel */
-  .users-panel {
-    position: fixed;
-    top: 52px;
-    right: 0;
-    width: 360px;
-    max-height: calc(100vh - 60px);
-    background: var(--surface);
-    border-left: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    box-shadow: -4px 4px 16px rgba(0,0,0,0.15);
-    z-index: 200;
+  /* Settings modal */
+  .settings-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 300;
     display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .settings-overlay.visible { display: flex; }
+  .settings-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    width: 520px;
+    max-width: 95vw;
+    max-height: 80vh;
+    display: flex;
     flex-direction: column;
     overflow: hidden;
   }
-  .users-panel.visible { display: flex; }
-  .users-panel-header {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
+  .settings-header {
+    padding: 16px 20px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-weight: 600;
-    font-size: 14px;
     flex-shrink: 0;
   }
-  .users-panel-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 18px;
-    line-height: 1;
-    padding: 0 4px;
+  .settings-title { font-weight: 700; font-size: 15px; }
+  .settings-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--fg-dim); font-size: 20px; line-height: 1; padding: 0 2px;
   }
-  .users-panel-close:hover { color: var(--text); }
-  .users-list {
+  .settings-close:hover { color: var(--fg); }
+  .settings-tabs {
+    display: flex;
+    gap: 0;
+    padding: 12px 20px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .settings-tab {
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--fg-dim);
+    margin-bottom: -1px;
+    user-select: none;
+  }
+  .settings-tab:hover { color: var(--fg); }
+  .settings-tab.active { border-bottom-color: var(--accent); color: var(--fg); font-weight: 600; }
+  .settings-body {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 0;
+    padding: 20px;
   }
+  .settings-section { margin-bottom: 24px; }
+  .settings-section:last-child { margin-bottom: 0; }
+  .settings-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+    margin-bottom: 12px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .settings-row label { color: var(--fg); }
+  /* Users tab */
   .user-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 16px;
+    padding: 8px 0;
     font-size: 13px;
+    border-bottom: 1px solid var(--border);
   }
-  .user-row:hover { background: var(--bg); }
-  .users-panel .user-avatar {
-    width: 28px;
-    height: 28px;
+  .user-row:last-child { border-bottom: none; }
+  .user-row-avatar {
+    width: 30px; height: 30px;
     border-radius: 50%;
     background: var(--accent);
     color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
     flex-shrink: 0;
   }
-  .user-row .user-info { flex: 1; min-width: 0; }
-  .user-row .user-name { font-weight: 500; color: var(--fg); }
-  .user-row .user-meta { color: var(--fg-dim); font-size: 11px; }
+  .user-row-info { flex: 1; min-width: 0; }
+  .user-row-name { font-weight: 500; }
+  .user-row-sub { color: var(--fg-dim); font-size: 11px; }
   .user-role-badge {
-    font-size: 10px;
-    padding: 1px 6px;
+    font-size: 10px; padding: 1px 7px;
     border-radius: 10px;
-    background: var(--border);
-    color: var(--fg-dim);
+    background: var(--border); color: var(--fg-dim);
   }
   .user-role-badge.admin { background: var(--accent); color: white; }
   .user-delete-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--fg-dim);
-    font-size: 14px;
-    padding: 2px 4px;
-    border-radius: 4px;
+    background: none; border: none; cursor: pointer;
+    color: var(--fg-dim); font-size: 14px; padding: 2px 4px; border-radius: 4px;
   }
   .user-delete-btn:hover { background: var(--red-dim); color: var(--red); }
-  .users-create-form {
-    padding: 12px 16px;
+  .create-user-section {
+    margin-top: 16px; padding-top: 16px;
     border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
+  }
+  .create-user-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
-    flex-shrink: 0;
+    margin-bottom: 8px;
   }
-  .users-create-form h4 {
-    margin: 0;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--fg-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .users-create-form input, .users-create-form select {
-    width: 100%;
-    padding: 6px 8px;
+  .create-user-grid input, .create-user-grid select,
+  .create-user-full {
+    padding: 7px 9px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 5px;
     background: var(--bg);
     color: var(--fg);
     font-size: 13px;
+    width: 100%;
     box-sizing: border-box;
   }
-  .users-create-form input:focus, .users-create-form select:focus {
-    outline: none;
-    border-color: var(--accent);
+  .create-user-grid input:focus, .create-user-grid select:focus,
+  .create-user-full:focus { outline: none; border-color: var(--accent); }
+  .create-user-full { margin-bottom: 8px; }
+  .create-user-footer { display: flex; align-items: center; gap: 8px; }
+  .create-user-footer input { flex: 1; }
+  .btn-primary {
+    padding: 7px 16px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 5px;
+    cursor: pointer; font-size: 13px; white-space: nowrap;
   }
-  .users-create-row { display: flex; gap: 6px; }
-  .users-create-row input { flex: 1; }
-  .users-create-btn {
-    padding: 6px 14px;
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    white-space: nowrap;
-  }
-  .users-create-btn:hover { background: var(--accent-dim); }
-  .users-error { color: var(--red); font-size: 12px; }
-  /* Manage users button in header */
-  .manage-users-btn {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    color: var(--fg-dim);
-    display: none;
-  }
-  .manage-users-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-dim); }
+  .form-error { color: var(--red); font-size: 12px; margin-top: 6px; }
 
   /* ── Layout / panel controls in header ── */
   .layout-btn, .reset-btn {
@@ -1372,28 +1375,74 @@
   </div>
 </div>
 
-<!-- User management panel (admin only) -->
-<div class="users-panel" id="users-panel">
-  <div class="users-panel-header">
-    <span>Manage Users</span>
-    <button class="users-panel-close" id="users-panel-close">×</button>
-  </div>
-  <div class="users-list" id="users-list"></div>
-  <div class="users-create-form" id="users-create-form">
-    <h4>Create User</h4>
-    <div class="users-create-row">
-      <input type="text" id="new-username" placeholder="Username" autocomplete="off">
-      <select id="new-role">
-        <option value="member">Member</option>
-        <option value="admin">Admin</option>
-      </select>
+<!-- Settings modal -->
+<div class="settings-overlay" id="settings-overlay">
+  <div class="settings-modal">
+    <div class="settings-header">
+      <span class="settings-title">Settings</span>
+      <button class="settings-close" id="settings-close">×</button>
     </div>
-    <input type="text" id="new-display-name" placeholder="Display name (optional)" autocomplete="off">
-    <div class="users-create-row">
-      <input type="password" id="new-password" placeholder="Password (min 8 chars)" autocomplete="new-password">
-      <button class="users-create-btn" id="create-user-btn">Add</button>
+    <div class="settings-tabs">
+      <div class="settings-tab active" data-tab="general">General</div>
+      <div class="settings-tab" id="users-tab-btn" data-tab="users" style="display:none">Users</div>
     </div>
-    <div class="users-error" id="users-error"></div>
+    <div class="settings-body">
+      <!-- General tab -->
+      <div id="settings-tab-general">
+        <div class="settings-section">
+          <div class="settings-section-title">Appearance</div>
+          <div class="settings-row">
+            <label>Font Size</label>
+            <div class="button-group">
+              <button class="btn-icon" id="font-dec" title="Decrease">-</button>
+              <span class="btn-value" id="font-size-value">14</span>
+              <button class="btn-icon" id="font-inc" title="Increase">+</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Theme</label>
+            <div class="button-group theme-icons">
+              <button class="btn-icon" id="theme-dark" title="Dark">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A7.5 7.5 0 019.5 4a7 7 0 1010.5 10.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+              </button>
+              <button class="btn-icon" id="theme-light" title="Light">
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v3M12 18.5v3M4.5 12h-3M22.5 12h-3M5.7 5.7l-2-2M20.3 20.3l-2-2M18.3 5.7l2-2M3.7 20.3l2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="btn-icon" id="theme-system" title="System">
+                <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 19h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Identity</div>
+          <div class="settings-row">
+            <label>Your display name</label>
+            <input type="text" id="sender-input-settings" placeholder="Your name" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-size:13px;width:160px">
+          </div>
+        </div>
+      </div>
+      <!-- Users tab (admin only) -->
+      <div id="settings-tab-users" style="display:none">
+        <div id="users-list"></div>
+        <div class="create-user-section">
+          <div class="settings-section-title">Create User</div>
+          <div class="create-user-grid">
+            <input type="text" id="new-username" placeholder="Username" autocomplete="off">
+            <select id="new-role">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <input type="text" id="new-display-name" class="create-user-full" placeholder="Display name (optional)" autocomplete="off">
+          <div class="create-user-footer">
+            <input type="password" id="new-password" placeholder="Password (min 8 chars)" autocomplete="new-password">
+            <button class="btn-primary" id="create-user-btn">Add User</button>
+          </div>
+          <div class="form-error" id="users-error"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1416,7 +1465,6 @@
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       Reset
     </button>
-    <button class="manage-users-btn" id="manage-users-btn" title="Manage users">👥 Users</button>
     <button class="logout-btn" id="logout-btn" title="Sign out" style="display:none">Sign out</button>
   </div>
 </header>
@@ -1453,7 +1501,7 @@
         </span>
         <span>Profile</span>
       </div>
-      <div class="user-menu-item">
+      <div class="user-menu-item" id="settings-menu-item">
         <span class="ico">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.5"/><path d="M19.4 15a1 1 0 00.2 1.1l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1 1 0 00-1.1-.2 1 1 0 00-.6.9V20a2 2 0 11-4 0v-.1a1 1 0 00-.6-.9 1 1 0 00-1.1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1 1 0 00.2-1.1 1 1 0 00-.9-.6H4a2 2 0 110-4h.1a1 1 0 00.9-.6 1 1 0 00-.2-1.1l-.1-.1a2 2 0 112.8-2.8l.1.1a1 1 0 001.1.2 1 1 0 00.6-.9V4a2 2 0 114 0v.1a1 1 0 00.6.9 1 1 0 001.1-.2l.1-.1a2 2 0 112.8 2.8l-.1.1a1 1 0 00-.2 1.1 1 1 0 00.9.6H20a2 2 0 110 4h-.1a1 1 0 00-.9.6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
@@ -1463,30 +1511,6 @@
       <div class="identity-inline">
         <span>You:</span>
         <input type="text" id="sender-input" value="dashboard" placeholder="Your name">
-      </div>
-      <div class="user-controls">
-        <div class="control-row">
-          <span class="control-label">Font Size</span>
-          <div class="button-group">
-            <button class="btn-icon" id="font-dec" title="Decrease">-</button>
-            <span class="btn-value" id="font-size-value">14</span>
-            <button class="btn-icon" id="font-inc" title="Increase">+</button>
-          </div>
-        </div>
-        <div class="control-row">
-          <span class="control-label">Theme</span>
-          <div class="button-group theme-icons">
-            <button class="btn-icon" id="theme-dark" title="Dark">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A7.5 7.5 0 019.5 4a7 7 0 1010.5 10.5z" stroke="currentColor" stroke-width="1.5"/></svg>
-            </button>
-            <button class="btn-icon" id="theme-light" title="Light">
-              <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v3M12 18.5v3M4.5 12h-3M22.5 12h-3M5.7 5.7l-2-2M20.3 20.3l-2-2M18.3 5.7l2-2M3.7 20.3l2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            </button>
-            <button class="btn-icon" id="theme-system" title="System">
-              <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 19h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            </button>
-          </div>
-        </div>
       </div>
       <div class="user-divider"></div>
       <div class="user-menu-item">
@@ -1645,12 +1669,13 @@ async function initAuth() {
   const loginTokenRemember = document.getElementById('login-remember-token');
   const loginTokenError = document.getElementById('login-token-error');
   const logoutBtn = document.getElementById('logout-btn');
-  const manageUsersBtn = document.getElementById('manage-users-btn');
 
   function showDashboard() {
     loginScreen.classList.remove('visible');
     logoutBtn.style.display = '';
-    if (currentUser?.role === 'admin') manageUsersBtn.style.display = '';
+    if (currentUser?.role === 'admin') {
+      document.getElementById('users-tab-btn').style.display = '';
+    }
     startApp();
   }
 
@@ -1701,19 +1726,43 @@ async function initAuth() {
     location.reload();
   });
 
-  // Manage users panel
-  manageUsersBtn.addEventListener('click', () => {
-    const panel = document.getElementById('users-panel');
-    panel.classList.toggle('visible');
-    if (panel.classList.contains('visible')) loadUsers();
+  // Settings modal
+  function openSettings(tab = 'general') {
+    const overlay = document.getElementById('settings-overlay');
+    overlay.classList.add('visible');
+    switchSettingsTab(tab);
+    // Sync sender-input to settings input
+    document.getElementById('sender-input-settings').value = document.getElementById('sender-input').value;
+  }
+  function closeSettings() {
+    document.getElementById('settings-overlay').classList.remove('visible');
+  }
+  function switchSettingsTab(tab) {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.getElementById('settings-tab-general').style.display = tab === 'general' ? '' : 'none';
+    document.getElementById('settings-tab-users').style.display = tab === 'users' ? '' : 'none';
+    if (tab === 'users') loadUsers();
+  }
+  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  document.getElementById('settings-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSettings();
   });
-  document.getElementById('users-panel-close').addEventListener('click', () => {
-    document.getElementById('users-panel').classList.remove('visible');
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchSettingsTab(tab.dataset.tab));
+  });
+  document.getElementById('settings-menu-item').addEventListener('click', () => {
+    document.getElementById('user-menu').classList.remove('visible');
+    openSettings('general');
+  });
+  // Sync settings sender input back to the main sender input
+  document.getElementById('sender-input-settings').addEventListener('input', e => {
+    document.getElementById('sender-input').value = e.target.value;
+    document.getElementById('sender-input').dispatchEvent(new Event('input'));
   });
 
   async function loadUsers() {
     const list = document.getElementById('users-list');
-    list.innerHTML = '<div style="padding:12px 16px;color:var(--fg-dim);font-size:13px">Loading…</div>';
+    list.innerHTML = '<div style="color:var(--fg-dim);font-size:13px;padding:8px 0">Loading…</div>';
     try {
       const r = await fetch(API + '/users', { headers: { 'X-AgentBridge-Token': TOKEN } });
       const users = await r.json();
@@ -1724,10 +1773,10 @@ async function initAuth() {
         const initial = (u.display_name || u.username).charAt(0).toUpperCase();
         const isMe = currentUser?.id === u.id;
         row.innerHTML = `
-          <div class="user-avatar">${initial}</div>
-          <div class="user-info">
-            <div class="user-name">${u.display_name || u.username}${isMe ? ' <span style="color:var(--fg-dim);font-size:11px">(you)</span>' : ''}</div>
-            <div class="user-meta">@${u.username}</div>
+          <div class="user-row-avatar">${initial}</div>
+          <div class="user-row-info">
+            <div class="user-row-name">${u.display_name || u.username}${isMe ? ' <span style="color:var(--fg-dim);font-size:11px">(you)</span>' : ''}</div>
+            <div class="user-row-sub">@${u.username}</div>
           </div>
           <span class="user-role-badge ${u.role}">${u.role}</span>
           ${!isMe ? `<button class="user-delete-btn" data-id="${u.id}" title="Delete user">🗑</button>` : ''}
@@ -1745,7 +1794,7 @@ async function initAuth() {
         });
       });
     } catch (e) {
-      list.innerHTML = '<div style="padding:12px 16px;color:var(--red);font-size:13px">Failed to load users</div>';
+      list.innerHTML = '<div style="color:var(--red);font-size:13px;padding:8px 0">Failed to load users</div>';
     }
   }
 
