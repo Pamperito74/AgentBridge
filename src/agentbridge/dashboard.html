@@ -1169,6 +1169,54 @@
   }
   .btn-primary:hover { background: var(--accent-dim); }
   .form-error { color: var(--red); font-size: 12px; margin-top: 6px; }
+  /* ── Password show/hide toggle ── */
+  .pw-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .pw-wrap input { flex: 1; padding-right: 36px !important; }
+  .pw-toggle {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-dim);
+    padding: 0;
+    line-height: 1;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.1s;
+  }
+  .pw-toggle:hover { color: var(--fg); background: var(--bg-hover); }
+  /* ── Toast notification ── */
+  .ab-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    padding: 10px 20px;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--fg);
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .ab-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .ab-toast.success { border-color: var(--accent); color: var(--accent); }
+  .ab-toast.error { border-color: var(--red); color: var(--red); }
 
   /* ── Layout / panel controls in header ── */
   .layout-btn, .reset-btn {
@@ -1345,7 +1393,12 @@
       </div>
       <div class="login-field">
         <label for="login-password-input">Password</label>
-        <input type="password" id="login-password-input" placeholder="••••••••" autocomplete="current-password">
+        <div class="pw-wrap">
+          <input type="password" id="login-password-input" placeholder="••••••••" autocomplete="current-password">
+          <button type="button" class="pw-toggle" data-for="login-password-input" title="Show/hide password">
+            <svg id="pw-eye-login" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
       <label class="login-remember">
         <input type="checkbox" id="login-remember"> Remember on this device
@@ -1367,7 +1420,12 @@
       </div>
       <div class="login-field">
         <label for="setup-password">Password</label>
-        <input type="password" id="setup-password" placeholder="Min 8 characters" autocomplete="new-password">
+        <div class="pw-wrap">
+          <input type="password" id="setup-password" placeholder="Min 8 characters" autocomplete="new-password">
+          <button type="button" class="pw-toggle" data-for="setup-password" title="Show/hide password">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
       <button class="login-btn" id="setup-btn">Create admin account</button>
       <div class="login-error" id="setup-error"></div>
@@ -1429,17 +1487,35 @@
         </div>
         <div class="settings-section">
           <div class="settings-section-title">Identity</div>
-          <div class="settings-row">
-            <label>Your display name</label>
-            <input type="text" id="sender-input-settings" placeholder="Your name" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-size:13px;width:160px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="text" id="sender-input-settings" placeholder="Your name" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px;outline:none">
+              <button class="btn-primary" id="identity-save-btn">Save</button>
+            </div>
+            <span id="identity-status" style="font-size:12px;min-height:16px"></span>
           </div>
         </div>
         <div class="settings-section" id="change-password-section" style="display:none">
           <div class="settings-section-title">Change Password</div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
-            <input type="password" id="pw-new" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
-            <input type="password" id="pw-confirm" placeholder="Confirm new password" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
+            <div class="pw-wrap">
+              <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px;width:100%">
+              <button type="button" class="pw-toggle" data-for="pw-current" title="Show/hide">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="pw-wrap">
+              <input type="password" id="pw-new" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px;width:100%">
+              <button type="button" class="pw-toggle" data-for="pw-new" title="Show/hide">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="pw-wrap">
+              <input type="password" id="pw-confirm" placeholder="Confirm new password" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px;width:100%">
+              <button type="button" class="pw-toggle" data-for="pw-confirm" title="Show/hide">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
             <div style="display:flex;align-items:center;gap:8px">
               <button class="btn-primary" id="pw-save-btn">Update Password</button>
               <span id="pw-status" style="font-size:12px"></span>
@@ -1461,7 +1537,12 @@
           </div>
           <input type="text" id="new-display-name" class="create-user-full" placeholder="Display name (optional)" autocomplete="off">
           <div class="create-user-footer">
-            <input type="password" id="new-password" placeholder="Password (min 8 chars)" autocomplete="new-password">
+            <div class="pw-wrap" style="flex:1">
+              <input type="password" id="new-password" placeholder="Password (min 8 chars)" autocomplete="new-password" style="width:100%">
+              <button type="button" class="pw-toggle" data-for="new-password" title="Show/hide">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
             <button class="btn-primary" id="create-user-btn">Add User</button>
           </div>
           <div class="form-error" id="users-error"></div>
@@ -1614,6 +1695,8 @@
   </div>
 </main>
 
+<div class="ab-toast" id="ab-toast"></div>
+
 <script>
 const fontHref = 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap';
 const fontLink = document.createElement('link');
@@ -1621,6 +1704,32 @@ fontLink.rel = 'stylesheet';
 fontLink.href = fontHref;
 document.head.appendChild(fontLink);
 const API = window.location.origin;
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('ab-toast');
+  t.textContent = msg;
+  t.className = `ab-toast ${type} visible`;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'ab-toast'; }, 3000);
+}
+
+// ── Password show/hide toggle ──────────────────────────────────────────
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.pw-toggle');
+  if (!btn) return;
+  const inputId = btn.dataset.for;
+  if (!inputId) return;
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  // Swap eye icon: open eye = visible, crossed = hidden
+  btn.innerHTML = show
+    ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+});
 
 // ── Auth ──────────────────────────────────────────────────────────────
 let TOKEN = sessionStorage.getItem('ab-token') || localStorage.getItem('ab-token') || '';
@@ -1699,7 +1808,10 @@ async function initAuth() {
     loginScreen.classList.remove('visible');
     logoutBtn.style.display = '';
     if (currentUser?.id) {
-      // Real user account — show change password section
+      // Set sender name from logged-in user's display name
+      const displayName = currentUser.display_name || currentUser.username;
+      document.getElementById('sender-input').value = displayName;
+      // Show change password section for real accounts
       document.getElementById('change-password-section').style.display = '';
     }
     if (currentUser?.role === 'admin') {
@@ -1760,8 +1872,10 @@ async function initAuth() {
     const overlay = document.getElementById('settings-overlay');
     overlay.classList.add('visible');
     switchSettingsTab(tab);
-    // Sync sender-input to settings input
+    // Sync sender-input to settings input and clear old status
     document.getElementById('sender-input-settings').value = document.getElementById('sender-input').value;
+    document.getElementById('identity-status').textContent = '';
+    document.getElementById('pw-status').textContent = '';
   }
   function closeSettings() {
     document.getElementById('settings-overlay').classList.remove('visible');
@@ -1783,10 +1897,24 @@ async function initAuth() {
     document.getElementById('user-menu').classList.remove('visible');
     openSettings('general');
   });
-  // Sync settings sender input back to the main sender input
-  document.getElementById('sender-input-settings').addEventListener('input', e => {
-    document.getElementById('sender-input').value = e.target.value;
-    document.getElementById('sender-input').dispatchEvent(new Event('input'));
+  // Identity save button — only register/update on explicit save
+  document.getElementById('identity-save-btn').addEventListener('click', async () => {
+    const newName = document.getElementById('sender-input-settings').value.trim();
+    const statusEl = document.getElementById('identity-status');
+    if (!newName) { statusEl.style.color = 'var(--red)'; statusEl.textContent = 'Name cannot be empty.'; return; }
+    // Update main sender input and re-register
+    document.getElementById('sender-input').value = newName;
+    selfName = null; // force re-register with new name
+    await registerSelf();
+    updateUserCard();
+    statusEl.style.color = 'var(--accent)';
+    statusEl.textContent = '✓ Saved';
+    showToast('Display name updated', 'success');
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  });
+  // Allow Enter in identity field to trigger save
+  document.getElementById('sender-input-settings').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('identity-save-btn').click();
   });
 
   // Change password (only shown for user-account sessions, not AGENTBRIDGE_TOKEN)
@@ -1817,7 +1945,8 @@ async function initAuth() {
       document.getElementById('pw-new').value = '';
       document.getElementById('pw-confirm').value = '';
       status.style.color = 'var(--accent)';
-      status.textContent = 'Password updated!';
+      status.textContent = '✓ Password updated';
+      showToast('Password updated', 'success');
       setTimeout(() => { status.textContent = ''; }, 3000);
     } else {
       const d = await r.json().catch(() => ({}));
@@ -2054,6 +2183,7 @@ async function registerSelf() {
         name,
         role: 'dashboard-ui',
         capabilities: ['dashboard'],
+        agent_type: 'human',
       }),
     });
   } catch (err) {
