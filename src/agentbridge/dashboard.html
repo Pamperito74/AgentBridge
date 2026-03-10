@@ -869,11 +869,143 @@
     aside, .rz-sidebar { display: none; }
     main { grid-column: 1; }
   }
+
+  /* ── Login screen ── */
+  #login-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #login-screen.visible { display: flex; }
+  .login-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: var(--shadow-2);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .login-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: var(--fs-xl);
+  }
+  .login-logo-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .login-subtitle {
+    color: var(--fg-dim);
+    font-size: var(--fs-sm);
+    margin-top: -12px;
+  }
+  .login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .login-field label {
+    font-size: var(--fs-sm);
+    color: var(--fg-mid);
+    font-weight: 600;
+  }
+  .login-field input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-size: var(--fs-md);
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: monospace;
+    letter-spacing: 0.05em;
+  }
+  .login-field input:focus { border-color: var(--accent); }
+  .login-remember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-sm);
+    color: var(--fg-dim);
+    cursor: pointer;
+    user-select: none;
+  }
+  .login-remember input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+  .login-btn {
+    background: var(--accent);
+    color: #0c1018;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-md);
+    font-weight: 700;
+    padding: 11px;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .login-btn:hover { background: var(--accent-dim); }
+  .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-error {
+    color: var(--red);
+    font-size: var(--fs-sm);
+    text-align: center;
+    min-height: 18px;
+  }
+  .login-hint {
+    color: var(--fg-dim);
+    font-size: var(--fs-xs);
+    text-align: center;
+    line-height: 1.5;
+  }
+  /* logout button in header */
+  .logout-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg-dim);
+    font-size: var(--fs-xs);
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
 </style>
 </head>
 <body>
 <div class="bg-orb one"></div>
 <div class="bg-orb two"></div>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-dot"></div>
+      AgentBridge
+    </div>
+    <div class="login-subtitle">Enter your access token to continue</div>
+    <div class="login-field">
+      <label for="login-token-input">Access Token</label>
+      <input type="password" id="login-token-input" placeholder="ab-••••••••••••••••" autocomplete="current-password" spellcheck="false">
+    </div>
+    <label class="login-remember">
+      <input type="checkbox" id="login-remember"> Remember on this device
+    </label>
+    <button class="login-btn" id="login-btn">Connect</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-hint">Token is set via <code>AGENTBRIDGE_TOKEN</code> env var on the server.</div>
+  </div>
+</div>
 
 <header>
   <div class="logo">
@@ -886,6 +1018,7 @@
       <span id="agent-count-num">0</span> online
     </div>
     <div class="conn-badge" id="conn-badge">Connecting</div>
+    <button class="logout-btn" id="logout-btn" title="Sign out" style="display:none">Sign out</button>
   </div>
 </header>
 
@@ -1029,7 +1162,107 @@ fontLink.rel = 'stylesheet';
 fontLink.href = fontHref;
 document.head.appendChild(fontLink);
 const API = window.location.origin;
-const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+
+// ── Auth: token stored in sessionStorage (or localStorage if "remember me")
+// Never in URL params (visible in browser history).
+let TOKEN = sessionStorage.getItem('ab-token') || localStorage.getItem('ab-token') || '';
+
+function saveToken(token, remember) {
+  TOKEN = token;
+  sessionStorage.setItem('ab-token', token);
+  if (remember) localStorage.setItem('ab-token', token);
+  else localStorage.removeItem('ab-token');
+}
+
+function clearToken() {
+  TOKEN = '';
+  sessionStorage.removeItem('ab-token');
+  localStorage.removeItem('ab-token');
+}
+
+async function validateToken(token) {
+  // Hit /health with the token — 200 = valid, 401 = wrong token, no token set = always 200
+  const r = await fetch(API + '/health', {
+    headers: token ? { 'X-AgentBridge-Token': token } : {},
+  });
+  return r.ok;
+}
+
+async function initAuth() {
+  const loginScreen = document.getElementById('login-screen');
+  const loginBtn = document.getElementById('login-btn');
+  const loginInput = document.getElementById('login-token-input');
+  const loginError = document.getElementById('login-error');
+  const loginRemember = document.getElementById('login-remember');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  async function tryConnect(token, remember) {
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Connecting…';
+    loginError.textContent = '';
+    const ok = await validateToken(token);
+    if (ok) {
+      saveToken(token, remember);
+      loginScreen.classList.remove('visible');
+      logoutBtn.style.display = '';
+      // Remove token from URL if it was there (legacy)
+      if (window.location.search.includes('token=')) {
+        history.replaceState(null, '', window.location.pathname);
+      }
+      startApp();
+    } else {
+      loginError.textContent = 'Invalid token. Check AGENTBRIDGE_TOKEN on the server.';
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Connect';
+    }
+  }
+
+  loginBtn.addEventListener('click', () => {
+    const token = loginInput.value.trim();
+    if (!token) { loginError.textContent = 'Please enter a token.'; return; }
+    tryConnect(token, loginRemember.checked);
+  });
+  loginInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') loginBtn.click();
+  });
+  logoutBtn.addEventListener('click', () => {
+    clearToken();
+    logoutBtn.style.display = 'none';
+    loginInput.value = '';
+    loginError.textContent = '';
+    loginScreen.classList.add('visible');
+    loginInput.focus();
+  });
+
+  // If we already have a stored token, validate silently and boot
+  if (TOKEN) {
+    const ok = await validateToken(TOKEN);
+    if (ok) {
+      logoutBtn.style.display = '';
+      startApp();
+      return;
+    } else {
+      clearToken(); // stored token no longer valid
+    }
+  }
+  // Also accept legacy ?token= URL param (one-time migration)
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) {
+    loginInput.value = urlToken;
+    tryConnect(urlToken, false);
+    return;
+  }
+  // Show login if no token set and server has no auth (open server)
+  const open = await validateToken('');
+  if (open) {
+    // Server has no auth configured — skip login
+    logoutBtn.style.display = 'none';
+    startApp();
+    return;
+  }
+  loginScreen.classList.add('visible');
+  loginInput.focus();
+}
 let currentThread = null;
 let agents = [];
 let threads = [];
@@ -1755,8 +1988,8 @@ clearBoardBtn.addEventListener('click', () => {
   userMenu.classList.remove('visible');
 });
 
-// ── Init
-(async () => {
+// ── Init (called by initAuth() once token is validated)
+async function startApp() {
   try {
     await registerSelf();
     updateUserCard();
@@ -1773,7 +2006,9 @@ clearBoardBtn.addEventListener('click', () => {
     document.getElementById('conn-badge').className = 'conn-badge disconnected';
     addSystemMsg(`Load failed: ${err.message}`);
   }
-})();
+}
+
+initAuth();
 </script>
 </body>
 </html>
