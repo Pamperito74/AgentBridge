@@ -718,8 +718,8 @@
     padding: 12px 16px 14px;
     border-top: 1px solid var(--border);
     background: linear-gradient(180deg, var(--bg-card), var(--bg-elev));
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto 1fr;
     gap: 8px;
     flex: 1;
     min-height: 0;
@@ -756,12 +756,14 @@
   .compose-row {
     display: flex;
     gap: 8px;
-    align-items: stretch;
-    flex: 1;
+    align-items: flex-end;
     min-height: 0;
+    /* fills the 1fr grid row */
   }
-  .compose-input-wrap { flex: 1; position: relative; min-height: 0; }
+  .compose-input-wrap { flex: 1; position: relative; align-self: stretch; }
   .compose-input-wrap textarea {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     font-family: inherit;
@@ -1998,9 +2000,10 @@ function loadSizes() {
   const sw = localStorage.getItem('ab-sidebar');
   const ch = localStorage.getItem('ab-compose-h');
   const ah = localStorage.getItem('ab-agents-h');
-  if (sw) root.style.setProperty('--sidebar', sw + 'px');
-  if (ch) root.style.setProperty('--compose-h', ch + 'px');
-  if (ah) root.style.setProperty('--agents-h', ah + 'px');
+  const maxComposeH = Math.floor(window.innerHeight * 0.6);
+  if (sw) root.style.setProperty('--sidebar', Math.max(160, Math.min(420, Number(sw))) + 'px');
+  if (ch) root.style.setProperty('--compose-h', Math.max(80, Math.min(maxComposeH, Number(ch))) + 'px');
+  if (ah) root.style.setProperty('--agents-h', Math.max(80, Math.min(460, Number(ah))) + 'px');
   const fs = Number(localStorage.getItem('ab-font-size') || '14');
   currentFontSize = String(fs);
   root.style.setProperty('--font-size', fs + 'px');
@@ -2062,7 +2065,8 @@ makeDrag({
     h: parseInt(getComputedStyle(root).getPropertyValue('--compose-h')) || 110,
   }),
   onMove: (e, { y, h }) => {
-    const nh = Math.max(80, Math.min(320, h - (e.clientY - y)));
+    const maxH = Math.floor(window.innerHeight * 0.6);
+    const nh = Math.max(80, Math.min(maxH, h - (e.clientY - y)));
     root.style.setProperty('--compose-h', nh + 'px');
     localStorage.setItem('ab-compose-h', nh);
   },
