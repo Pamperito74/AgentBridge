@@ -153,7 +153,9 @@ http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
 async def auth_and_logging_middleware(request: Request, call_next):
     started = time.perf_counter()
     path = request.url.path
-    if _auth_token and path != "/health":
+    # /ui and static assets are always public — the dashboard JS handles auth client-side
+    _public = {"/health", "/ui", "/favicon.ico"}
+    if _auth_token and path not in _public:
         supplied = request.headers.get("x-agentbridge-token") or request.query_params.get("token")
         if supplied != _auth_token:
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
