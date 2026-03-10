@@ -4,6 +4,8 @@ AgentBridge Server Runner with Auto-Restart
 Keeps the WebSocket + HTTP server running with automatic restart on crash
 """
 
+import os
+import re
 import subprocess
 import sys
 import time
@@ -19,6 +21,24 @@ RESTART_DELAY = 3
 def get_script_dir():
     """Get the directory of this script"""
     return Path(__file__).parent.absolute()
+
+
+def load_dotenv(script_dir: Path) -> dict:
+    """Load .env file from the script directory into a copy of the environment."""
+    env = os.environ.copy()
+    env_file = script_dir / ".env"
+    if not env_file.exists():
+        return env
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r'^export\s+(\w+)=["\']?([^"\']*)["\']?$', line) or \
+                re.match(r'^(\w+)=["\']?([^"\']*)["\']?$', line)
+            if m:
+                env[m.group(1)] = m.group(2)
+    return env
 
 def get_log_file():
     """Get log file path"""
@@ -43,6 +63,7 @@ def run_server():
     """Start the AgentBridge server"""
     script_dir = get_script_dir()
     log_file = get_log_file()
+    env = load_dotenv(script_dir)
 
     # Append to log file
     with open(log_file, 'a') as f:
@@ -70,6 +91,7 @@ def run_server():
                 stdout=f,
                 stderr=subprocess.STDOUT,
                 text=True,
+                env=env,
             )
 
         # Wait for it
