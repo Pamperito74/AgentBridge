@@ -1434,6 +1434,18 @@
             <input type="text" id="sender-input-settings" placeholder="Your name" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-size:13px;width:160px">
           </div>
         </div>
+        <div class="settings-section" id="change-password-section" style="display:none">
+          <div class="settings-section-title">Change Password</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
+            <input type="password" id="pw-new" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
+            <input type="password" id="pw-confirm" placeholder="Confirm new password" autocomplete="new-password" style="padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:13px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="btn-primary" id="pw-save-btn">Update Password</button>
+              <span id="pw-status" style="font-size:12px"></span>
+            </div>
+          </div>
+        </div>
       </div>
       <!-- Users tab (admin only) -->
       <div id="settings-tab-users" style="display:none">
@@ -1686,6 +1698,10 @@ async function initAuth() {
   function showDashboard() {
     loginScreen.classList.remove('visible');
     logoutBtn.style.display = '';
+    if (currentUser?.id) {
+      // Real user account — show change password section
+      document.getElementById('change-password-section').style.display = '';
+    }
     if (currentUser?.role === 'admin') {
       document.getElementById('users-tab-btn').style.display = '';
     }
@@ -1771,6 +1787,42 @@ async function initAuth() {
   document.getElementById('sender-input-settings').addEventListener('input', e => {
     document.getElementById('sender-input').value = e.target.value;
     document.getElementById('sender-input').dispatchEvent(new Event('input'));
+  });
+
+  // Change password (only shown for user-account sessions, not AGENTBRIDGE_TOKEN)
+  document.getElementById('pw-save-btn').addEventListener('click', async () => {
+    const current = document.getElementById('pw-current').value;
+    const next = document.getElementById('pw-new').value;
+    const confirm = document.getElementById('pw-confirm').value;
+    const status = document.getElementById('pw-status');
+    status.style.color = 'var(--red)';
+    if (!current || !next) { status.textContent = 'Fill in all fields.'; return; }
+    if (next.length < 8) { status.textContent = 'New password must be at least 8 characters.'; return; }
+    if (next !== confirm) { status.textContent = 'Passwords do not match.'; return; }
+    // Verify current password by attempting login
+    const checkR = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser.username, password: current }),
+    });
+    if (!checkR.ok) { status.textContent = 'Current password is incorrect.'; return; }
+    // Update password
+    const r = await fetch(API + '/users/' + currentUser.id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-AgentBridge-Token': TOKEN },
+      body: JSON.stringify({ password: next }),
+    });
+    if (r.ok) {
+      document.getElementById('pw-current').value = '';
+      document.getElementById('pw-new').value = '';
+      document.getElementById('pw-confirm').value = '';
+      status.style.color = 'var(--accent)';
+      status.textContent = 'Password updated!';
+      setTimeout(() => { status.textContent = ''; }, 3000);
+    } else {
+      const d = await r.json().catch(() => ({}));
+      status.textContent = d.detail || 'Failed to update password.';
+    }
   });
 
   async function loadUsers() {
