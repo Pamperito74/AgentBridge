@@ -536,6 +536,8 @@
   .avatar-badge.online { background: var(--green); }
   .avatar-badge.busy   { background: var(--yellow); }
   .avatar-badge.idle   { background: var(--fg-dim); }
+  .avatar-badge.stale  { background: var(--yellow); }
+  .avatar-badge.offline { background: var(--red); }
   .agent-info { overflow: hidden; flex: 1; min-width: 0; }
   .agent-name { font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .agent-sub  { font-size: var(--fs-xxs); color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -667,6 +669,29 @@
     position: relative;
     box-shadow: 0 10px 24px rgba(5,9,16,0.35);
   }
+  .msg-indicator {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-xxs);
+    color: var(--fg-dim);
+  }
+  .msg-spinner {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--fg-dim);
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+  }
+  .msg-warning { display: none; color: var(--yellow); font-weight: 600; }
+  .msg-bubble.pending .msg-indicator { display: inline-flex; }
+  .msg-bubble.timeout .msg-spinner { display: none; }
+  .msg-bubble.timeout .msg-warning { display: inline; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .msg-bubble.pending {
     opacity: 0.6;
     border-style: dashed;
@@ -1113,6 +1138,33 @@
     color: var(--fg-mid);
     margin-bottom: 12px;
   }
+  .debug-grid {
+    display: grid;
+    gap: 6px;
+  }
+  .debug-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--fg);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .debug-list {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--fg-mid);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
   .settings-row {
     display: flex;
     align-items: center;
@@ -1538,6 +1590,7 @@
       <div class="settings-tab active" data-tab="general">General</div>
       <div class="settings-tab" id="users-tab-btn" data-tab="users" style="display:none">Users</div>
       <div class="settings-tab" id="tools-tab-btn" data-tab="tools" style="display:none">Tools</div>
+      <div class="settings-tab" id="debug-tab-btn" data-tab="debug" style="display:none">Debug</div>
     </div>
     <div class="settings-body">
       <!-- General tab -->
@@ -1651,6 +1704,30 @@
           <div class="settings-row" style="align-items:center;gap:8px">
             <button class="btn-primary" id="prune-agents-btn">Remove stale agents</button>
             <span id="prune-agents-status" style="font-size:12px;min-height:16px"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Debug tab (admin only) -->
+      <div id="settings-tab-debug" style="display:none">
+        <div class="settings-section">
+          <div class="settings-section-title">System</div>
+          <div class="debug-grid">
+            <div class="debug-row"><span>Uptime</span><span id="debug-uptime">—</span></div>
+            <div class="debug-row"><span>Registered agents</span><span id="debug-agent-count">—</span></div>
+            <div class="debug-row"><span>WS connected</span><span id="debug-ws-count">—</span></div>
+            <div class="debug-row"><span>Pending requests</span><span id="debug-pending">—</span></div>
+            <div class="debug-row"><span>Incoming waiters</span><span id="debug-incoming">—</span></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">WS Connections</div>
+          <div id="debug-ws-list" class="debug-list">—</div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Maintenance</div>
+          <div class="settings-row" style="align-items:center;gap:8px">
+            <button class="btn-primary" id="debug-prune-btn">Force prune stale agents</button>
+            <span id="debug-prune-status" style="font-size:12px;min-height:16px"></span>
           </div>
         </div>
       </div>
@@ -1940,6 +2017,7 @@ async function initAuth() {
     if (currentUser?.role === 'admin') {
       document.getElementById('users-tab-btn').style.display = '';
       document.getElementById('tools-tab-btn').style.display = '';
+      document.getElementById('debug-tab-btn').style.display = '';
     }
     startApp();
   }
@@ -2009,7 +2087,10 @@ async function initAuth() {
     document.getElementById('settings-tab-general').style.display = tab === 'general' ? '' : 'none';
     document.getElementById('settings-tab-users').style.display = tab === 'users' ? '' : 'none';
     document.getElementById('settings-tab-tools').style.display = tab === 'tools' ? '' : 'none';
+    document.getElementById('settings-tab-debug').style.display = tab === 'debug' ? '' : 'none';
     if (tab === 'users') loadUsers();
+    if (tab === 'debug') startDebugPolling();
+    else stopDebugPolling();
   }
   document.getElementById('settings-close').addEventListener('click', closeSettings);
   document.getElementById('settings-overlay').addEventListener('click', e => {
@@ -2150,9 +2231,9 @@ async function initAuth() {
     }
   }
 
-  async function pruneAgents() {
-    const statusEl = document.getElementById('prune-agents-status');
-    const btn = document.getElementById('prune-agents-btn');
+  async function pruneAgents(statusId = 'prune-agents-status', buttonId = 'prune-agents-btn') {
+    const statusEl = document.getElementById(statusId);
+    const btn = document.getElementById(buttonId);
     const input = document.getElementById('stale-agent-seconds');
     const olderThan = Math.max(60, Math.min(86400, Number(input.value || 300)));
     input.value = String(olderThan);
@@ -2170,7 +2251,7 @@ async function initAuth() {
       statusEl.textContent = `✓ Removed ${d.count} agent(s)`;
       setTimeout(() => { statusEl.textContent = ''; }, 4000);
       // Refresh agents list if visible
-      api('/agents?active=1').then(a => { agents = a; renderAgents(); });
+      api('/agents').then(a => { agents = a; renderAgents(); });
     } catch (e) {
       statusEl.textContent = 'Failed to prune agents';
     } finally {
@@ -2179,7 +2260,46 @@ async function initAuth() {
     }
   }
 
-  document.getElementById('prune-agents-btn').addEventListener('click', pruneAgents);
+  document.getElementById('prune-agents-btn').addEventListener('click', () => pruneAgents());
+
+  let debugTimer = null;
+  function formatUptime(sec) {
+    const s = Math.floor(sec || 0);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    return `${h}h ${m}m ${r}s`;
+  }
+  async function loadDebug() {
+    try {
+      const d = await api('/admin/debug');
+      document.getElementById('debug-uptime').textContent = formatUptime(d.uptime_sec);
+      document.getElementById('debug-agent-count').textContent = d.agent_count;
+      document.getElementById('debug-ws-count').textContent = d.ws_connected_count;
+      document.getElementById('debug-pending').textContent = d.pending_requests;
+      document.getElementById('debug-incoming').textContent = d.incoming_waiters;
+      const list = document.getElementById('debug-ws-list');
+      list.innerHTML = d.ws_connected.length
+        ? d.ws_connected.map(n => `<div>${esc(n)}</div>`).join('')
+        : '—';
+    } catch (e) {
+      const list = document.getElementById('debug-ws-list');
+      list.textContent = 'Failed to load debug data';
+    }
+  }
+  function startDebugPolling() {
+    if (debugTimer) return;
+    loadDebug();
+    debugTimer = setInterval(loadDebug, 5000);
+  }
+  function stopDebugPolling() {
+    if (!debugTimer) return;
+    clearInterval(debugTimer);
+    debugTimer = null;
+  }
+  document.getElementById('debug-prune-btn').addEventListener('click', () =>
+    pruneAgents('debug-prune-status', 'debug-prune-btn')
+  );
 
   document.getElementById('create-user-btn').addEventListener('click', async () => {
     const username = document.getElementById('new-username').value.trim();
@@ -2303,7 +2423,62 @@ let selfName = null;
 let registerTimer = null;
 let inboxOnly = false;
 let currentFontSize = null;
-let pendingByCorrelation = new Map();
+let pendingTimers = new Map();
+let pendingStore = new Map();
+
+const PENDING_TIMEOUT_MS = 30000;
+const PENDING_STORE_KEY = 'ab-pending-requests';
+
+function loadPendingStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_STORE_KEY) || '{}');
+    pendingStore = new Map(Object.entries(raw));
+  } catch {
+    pendingStore = new Map();
+  }
+}
+function savePendingStore() {
+  const obj = {};
+  pendingStore.forEach((v, k) => { obj[k] = v; });
+  localStorage.setItem(PENDING_STORE_KEY, JSON.stringify(obj));
+}
+function schedulePendingTimeout(correlationId, startedAt) {
+  const age = Date.now() - startedAt;
+  if (age >= PENDING_TIMEOUT_MS) {
+    markPendingTimeout(correlationId);
+    return;
+  }
+  if (pendingTimers.has(correlationId)) clearTimeout(pendingTimers.get(correlationId));
+  const id = setTimeout(() => markPendingTimeout(correlationId), PENDING_TIMEOUT_MS - age);
+  pendingTimers.set(correlationId, id);
+}
+function markPendingTimeout(correlationId) {
+  document.querySelectorAll(`[data-correlation="${correlationId}"]`).forEach(el => {
+    el.classList.add('timeout');
+  });
+}
+function setPending(correlationId) {
+  const startedAt = Date.now();
+  pendingStore.set(correlationId, String(startedAt));
+  savePendingStore();
+  document.querySelectorAll(`[data-correlation="${correlationId}"]`).forEach(el => {
+    el.classList.add('pending');
+  });
+  schedulePendingTimeout(correlationId, startedAt);
+}
+function clearPending(correlationId) {
+  pendingStore.delete(correlationId);
+  savePendingStore();
+  if (pendingTimers.has(correlationId)) {
+    clearTimeout(pendingTimers.get(correlationId));
+    pendingTimers.delete(correlationId);
+  }
+  document.querySelectorAll(`[data-correlation="${correlationId}"]`).forEach(el => {
+    el.classList.remove('pending');
+    el.classList.remove('timeout');
+  });
+}
+loadPendingStore();
 
 // ── Palette for agent avatars
 const PALETTE = ['#7c5cfc','#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#38bdf8','#4ade80','#fb923c','#e879f9'];
@@ -2333,6 +2508,24 @@ function relTime(ts) {
 }
 function absTime(ts) {
   return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function heartbeatAgeSec(ts) {
+  if (!ts) return null;
+  const ms = Date.now() - new Date(ts).getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.floor(ms / 1000));
+}
+function heartbeatStatus(agent) {
+  const age = heartbeatAgeSec(agent.last_seen || agent.last_seen_at || agent.last_heartbeat);
+  if (age === null) return 'offline';
+  if (age <= 60) return 'online';
+  if (age <= 300) return 'stale';
+  return 'offline';
+}
+function lastSeenLabel(agent) {
+  const age = heartbeatAgeSec(agent.last_seen || agent.last_seen_at || agent.last_heartbeat);
+  if (age === null) return 'Last seen: unknown';
+  return `Last seen: ${age}s ago`;
 }
 
 // ── Fetch
@@ -2369,7 +2562,7 @@ async function registerSelf() {
   if (!name || name === selfName) return;
   selfName = name;
   try {
-    await api('/agents?active=1', {
+    await api('/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2417,10 +2610,12 @@ function renderAgents() {
     const color = agentColor(a.name);
     const caps = (a.capabilities || []).slice(0, 2).join(', ');
     const icon = a.agent_type === 'human' ? '👤' : '🤖';
+    const hbStatus = heartbeatStatus(a);
+    const hbLabel = lastSeenLabel(a);
     return `<div class="agent-item" data-name="${esc(a.name)}">
       <div class="avatar" style="background:${color}22; color:${color}">
         ${esc(initials(a.name))}
-        <div class="avatar-badge ${a.status || 'online'}"></div>
+        <div class="avatar-badge ${hbStatus}" title="${esc(hbLabel)}"></div>
       </div>
       <div class="agent-info">
         <div class="agent-name">${icon} ${esc(a.name)}</div>
@@ -2602,15 +2797,19 @@ function buildMsgGroup(msgs, startIdx) {
   const bubbles = msgs.slice(startIdx, end).map(m => {
     const typePill = m.msg_type && m.msg_type !== 'chat'
       ? `<span class="type-pill ${m.msg_type}">${m.msg_type}</span>` : '';
-    const pendingClass = m._pending ? ' pending' : '';
+    const isRequest = m.msg_type === 'request';
+    const pendingClass = (isRequest && m._pending) ? ' pending' : '';
     const correlationAttr = m.correlation_id ? ` data-correlation="${esc(m.correlation_id)}"` : '';
     const content = esc(m.content).replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
     const artifacts = m.artifacts && m.artifacts.length
       ? `<div class="artifacts">${m.artifacts.map(a =>
           `<span class="artifact">${a.type === 'file' ? '📄' : a.type === 'code' ? '💻' : '🔗'} ${esc(a.content.substring(0, 60))}</span>`
         ).join('')}</div>` : '';
+    const indicator = isRequest
+      ? `<span class="msg-indicator"><span class="msg-spinner"></span><span class="msg-warning">⚠ no response</span></span>`
+      : '';
     return `<div class="msg-bubble ${m.msg_type !== 'chat' ? m.msg_type : ''}${pendingClass}"${correlationAttr} title="${absTime(m.timestamp)}">
-      ${typePill}${content}${artifacts}
+      ${typePill}${content}${artifacts}${indicator}
     </div>`;
   }).join('');
 
@@ -2655,6 +2854,19 @@ async function reloadMessages() {
     i += group.count;
   }
   el.innerHTML = html;
+  // Reconcile pending requests after render
+  const responded = new Set(
+    msgs.filter(m => m.msg_type === 'response' && m.correlation_id).map(m => m.correlation_id)
+  );
+  responded.forEach(corr => clearPending(corr));
+  pendingStore.forEach((ts, corr) => {
+    if (responded.has(corr)) return;
+    document.querySelectorAll(`[data-correlation="${corr}"]`).forEach(elm => {
+      elm.classList.add('pending');
+    });
+    const startedAt = Number(ts) || Date.now();
+    schedulePendingTimeout(corr, startedAt);
+  });
   el.scrollTop = el.scrollHeight;
 }
 
@@ -2672,10 +2884,8 @@ function appendMessage(m) {
   }
   if (currentThread && m.thread !== currentThread) return;
   if (!matchesInboxFilter(m)) return;
-  if (m.correlation_id && pendingByCorrelation.has(m.correlation_id)) {
-    const pendingEl = pendingByCorrelation.get(m.correlation_id);
-    if (pendingEl && pendingEl.parentElement) pendingEl.parentElement.removeChild(pendingEl);
-    pendingByCorrelation.delete(m.correlation_id);
+  if (m.msg_type === 'response' && m.correlation_id) {
+    clearPending(m.correlation_id);
   }
   renderedIds.add(m.id);
   const el = document.getElementById('messages');
@@ -2689,7 +2899,7 @@ function appendMessage(m) {
   const node = wrapper.firstElementChild;
   if (node) el.appendChild(node);
   if (m._pending && m.correlation_id && node) {
-    pendingByCorrelation.set(m.correlation_id, node);
+    setPending(m.correlation_id);
   }
   el.scrollTop = el.scrollHeight;
 }
@@ -2740,17 +2950,21 @@ async function sendMessage() {
   const recipient = document.getElementById('recipient-select').value || null;
   const thread = document.getElementById('thread-select').value || 'general';
   const msg_type = document.getElementById('type-select').value || 'chat';
-  const correlation_id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const isRequest = msg_type === 'request';
+  const correlation_id = isRequest
+    ? ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`)
+    : null;
+  const localId = correlation_id || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const localMsg = {
-    id: `local-${correlation_id}`,
+    id: localId,
     sender,
     recipient,
     thread,
     msg_type,
     content,
-    correlation_id,
+    correlation_id: correlation_id || undefined,
     timestamp: new Date().toISOString(),
-    _pending: true,
+    _pending: isRequest,
   };
   try {
     ta.value = '';
@@ -2759,7 +2973,7 @@ async function sendMessage() {
     await api('/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id }),
+      body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id: correlation_id || undefined }),
     });
   } catch (err) {
     addSystemMsg(`Send failed: ${err.message}`);
@@ -3419,7 +3633,7 @@ async function startApp() {
     updateUserCard();
     setInterval(heartbeatSelf, 30000);
     await Promise.all([
-      api('/agents?active=1').then(a => { agents = a; renderAgents(); }),
+      api('/agents').then(a => { agents = a; renderAgents(); }),
       api('/threads').then(t => { threads = t; renderThreads(); }),
     ]);
     updateThreadHeader();

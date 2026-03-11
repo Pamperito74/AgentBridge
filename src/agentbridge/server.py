@@ -33,6 +33,7 @@ _store_lock = threading.Lock()
 # Reference to the uvicorn event loop — captured at startup so MCP tools
 # (which run synchronously) can submit coroutines to the async WS manager.
 _uvicorn_loop: asyncio.AbstractEventLoop | None = None
+_server_started_at = time.time()
 
 
 def get_store() -> MessageStore:
@@ -695,6 +696,25 @@ async def http_clear_board(body: ClearBoardRequest | None = None):
     await get_store()._run_in_thread(get_store().clear_board, payload.include_threads)
     _broadcast_sse("system", {"type": "clear", "include_threads": payload.include_threads})
     return {"cleared": True, "include_threads": payload.include_threads}
+
+
+@http_app.get("/admin/debug")
+async def http_admin_debug(request: Request):
+    _assert_admin(request)
+    manager = get_ws_manager()
+    connected = list(manager.connections.keys())
+    pending = len(manager.pending_requests)
+    incoming = len(manager.incoming_waiters)
+    agent_count = len(await get_store().list_agents_async())
+    uptime_sec = max(0.0, time.time() - _server_started_at)
+    return {
+        "ws_connected": connected,
+        "ws_connected_count": len(connected),
+        "pending_requests": pending,
+        "incoming_waiters": incoming,
+        "agent_count": agent_count,
+        "uptime_sec": uptime_sec,
+    }
 
 
 @http_app.post("/admin/prune-agents")
