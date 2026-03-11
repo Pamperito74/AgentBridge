@@ -44,7 +44,17 @@ def get_store() -> MessageStore:
 # SSE subscribers: list of (event loop, asyncio.Queue)
 _sse_subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue[str]]] = []
 _sse_lock = threading.Lock()
-_auth_token = os.environ.get("AGENTBRIDGE_TOKEN", "")
+# Re-read on every request so the server picks up AGENTBRIDGE_TOKEN
+# even if the env var is set after the process starts (e.g. via systemd reload).
+# Kept for test compatibility (tests monkeypatch this directly)
+_auth_token = ""
+
+
+def _get_auth_token() -> str:
+    """Read AGENTBRIDGE_TOKEN dynamically so the server picks it up even if
+    the env var is set after process start. Falls back to the module-level
+    _auth_token for test monkeypatching."""
+    return _auth_token or os.environ.get("AGENTBRIDGE_TOKEN", "")
 
 
 def _setup_logging() -> logging.Logger:
@@ -168,7 +178,7 @@ async def auth_and_logging_middleware(request: Request, call_next):
             if session_user:
                 request.state.user = session_user
                 request.state.is_admin = session_user["role"] == "admin"
-            elif _auth_token and supplied == _auth_token:
+            elif _get_auth_token() and supplied == _get_auth_token():
                 # Backward-compat: AGENTBRIDGE_TOKEN env var on server
                 request.state.is_admin = True
             elif await asyncio.to_thread(get_store().verify_agent_key, supplied):
@@ -178,7 +188,7 @@ async def auth_and_logging_middleware(request: Request, call_next):
                 return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
         else:
             # No token supplied — allow only on open servers (no token AND no users)
-            if _auth_token or await asyncio.to_thread(get_store().has_any_users):
+            if _get_auth_token() or await asyncio.to_thread(get_store().has_any_users):
                 return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     response = await call_next(request)
@@ -648,11 +658,11 @@ def serve_dashboard():
 @http_app.get("/health")
 async def health():
     has_users = await asyncio.to_thread(get_store().has_any_users)
-    if not has_users and not _auth_token:
+    if not has_users and not _get_auth_token():
         auth_mode = "setup"
     elif has_users:
         auth_mode = "users"
-    elif _auth_token:
+    elif _get_auth_token():
         auth_mode = "token"
     else:
         auth_mode = "open"
