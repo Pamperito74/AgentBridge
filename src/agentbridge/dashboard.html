@@ -2433,6 +2433,11 @@ function renderDmList() {
   });
   // Also include agents with pending unread even if not in allMessages yet
   Object.keys(dmUnread).forEach(name => { if (dmUnread[name] > 0) dmPartners.add(name); });
+  // Only show partners that are currently active agents (filter out kicked/expired agents)
+  const activeNames = new Set(agents.map(a => a.name));
+  for (const name of [...dmPartners]) {
+    if (!activeNames.has(name) && !(dmUnread[name] > 0)) dmPartners.delete(name);
+  }
 
   const totalUnread = Object.values(dmUnread).reduce((a, b) => a + b, 0);
   if (unreadEl) {
