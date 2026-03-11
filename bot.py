@@ -24,7 +24,17 @@ Environment variables:
   BOT_CONTEXT_MESSAGES    Recent messages to include as context (default: 10)
   BOT_SYSTEM_PROMPT       Override the default system prompt
 
-Run locally (Ollama):
+  LLM_COMMAND             Use a CLI command instead of HTTP API.
+                          The prompt is written to stdin; stdout is the response.
+                          When set, LLM_BASE_URL / LLM_MODEL / LLM_API_KEY are ignored.
+                          Examples:
+                            LLM_COMMAND=claude          (Claude Code CLI — no API key needed)
+                            LLM_COMMAND=ollama run llama3.2
+
+Run with Claude CLI (no API key):
+  LLM_COMMAND=claude python bot.py
+
+Run locally (Ollama HTTP):
   ollama pull llama3.2
   python bot.py
 
@@ -44,6 +54,8 @@ import json
 import logging
 import os
 import re
+import shlex
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -89,7 +101,10 @@ HTTP_URL = os.environ.get("AGENTBRIDGE_HTTP_URL", "http://localhost:7890")
 TOKEN = os.environ.get("AGENTBRIDGE_TOKEN", "") or _load_token_from_shell()
 CONTEXT_MESSAGES = int(os.environ.get("BOT_CONTEXT_MESSAGES", "10"))
 
-# LLM config — defaults to Ollama running locally
+# LLM config
+# Option A — subprocess (CLI): set LLM_COMMAND, e.g. "claude" or "ollama run llama3.2"
+# Option B — HTTP API: set LLM_BASE_URL (OpenAI-compatible), LLM_MODEL, LLM_API_KEY
+LLM_COMMAND = os.environ.get("LLM_COMMAND", "").strip()  # e.g. "claude" or "ollama run llama3.2"
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1").rstrip("/")
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.2")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")  # Ollama ignores this
@@ -104,11 +119,9 @@ SYSTEM_PROMPT = os.environ.get("BOT_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
 
 # ── LLM call (OpenAI-compatible) ──────────────────────────────────────────────
 
-def call_llm(user_message: str, context_messages: list[dict] | None = None) -> str:
-    """Call any OpenAI-compatible chat completions endpoint."""
-    messages: list[dict] = []
-
-    # Inject recent bridge messages as context
+def _build_prompt(user_message: str, context_messages: list[dict] | None = None) -> tuple[str, list[dict]]:
+    """Return (full_text_prompt, openai_messages_list) for both backends."""
+    context_block = ""
     if context_messages:
         lines = []
         for m in context_messages[-CONTEXT_MESSAGES:]:
@@ -118,27 +131,50 @@ def call_llm(user_message: str, context_messages: list[dict] | None = None) -> s
             to = f" → {recipient}" if recipient else ""
             lines.append(f"[{sender}{to}]: {content}")
         if lines:
-            ctx = "Recent bridge messages (context):\n" + "\n".join(lines)
-            messages.append({"role": "user", "content": ctx})
-            messages.append({"role": "assistant", "content": "Understood."})
+            context_block = "Recent bridge messages (context):\n" + "\n".join(lines) + "\n\n"
 
-    messages.append({"role": "user", "content": user_message})
+    full_text = f"{SYSTEM_PROMPT}\n\n{context_block}{user_message}"
 
+    openai_messages: list[dict] = []
+    if context_block:
+        openai_messages.append({"role": "user", "content": context_block.strip()})
+        openai_messages.append({"role": "assistant", "content": "Understood."})
+    openai_messages.append({"role": "user", "content": user_message})
+
+    return full_text, openai_messages
+
+
+def call_llm(user_message: str, context_messages: list[dict] | None = None) -> str:
+    """Call the configured LLM — subprocess CLI or OpenAI-compatible HTTP."""
+    full_text, openai_messages = _build_prompt(user_message, context_messages)
+
+    if LLM_COMMAND:
+        # ── Subprocess path (e.g. LLM_COMMAND=claude or LLM_COMMAND=ollama run llama3.2) ──
+        result = subprocess.run(
+            shlex.split(LLM_COMMAND),
+            input=full_text,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"LLM command exited {result.returncode}: {result.stderr[:200]}")
+        return result.stdout.strip()
+
+    # ── OpenAI-compatible HTTP path ──────────────────────────────────────────
     payload = {
         "model": LLM_MODEL,
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + messages,
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + openai_messages,
         "max_tokens": LLM_MAX_TOKENS,
         "stream": False,
     }
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LLM_API_KEY}",
     }
-    data = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{LLM_BASE_URL}/chat/completions",
-        data=data,
+        data=json.dumps(payload).encode(),
         headers=headers,
         method="POST",
     )
@@ -147,8 +183,7 @@ def call_llm(user_message: str, context_messages: list[dict] | None = None) -> s
             result = json.loads(r.read().decode())
             return result["choices"][0]["message"]["content"].strip()
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        raise RuntimeError(f"LLM HTTP {e.code}: {body[:200]}")
+        raise RuntimeError(f"LLM HTTP {e.code}: {e.read().decode()[:200]}")
     except Exception as e:
         raise RuntimeError(f"LLM call failed: {e}")
 
@@ -324,7 +359,8 @@ class BotClient(AgentBridgeClient):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    logger.info(f"BOT_NAME={BOT_NAME}  LLM={LLM_MODEL}  LLM_BASE_URL={LLM_BASE_URL}")
+    backend = f"command={LLM_COMMAND}" if LLM_COMMAND else f"model={LLM_MODEL} url={LLM_BASE_URL}"
+    logger.info(f"BOT_NAME={BOT_NAME}  LLM backend: {backend}")
 
     # Smoke-test LLM connection at startup
     try:

@@ -22,19 +22,17 @@ Environment=BOT_NAME=claude-ct1
 Environment=BOT_ROLE=AI coding agent — AgentBridge + CirrusTranslate
 Environment=BOT_CAPABILITIES=code-review,backend,typescript,python,agentbridge,nestjs,react
 
-# LLM — swap these to change provider with no code changes:
+# LLM — pick ONE backend, comment out the others:
+#
+#   Claude CLI (installed on server, no API key needed):
+Environment=LLM_COMMAND=claude
 #
 #   Ollama (local, no API key):
-Environment=LLM_BASE_URL=http://localhost:11434/v1
-Environment=LLM_MODEL=llama3.2
+#Environment=LLM_COMMAND=ollama run llama3.2
 #
-#   Groq (free tier, fast, no GPU):
+#   OpenAI-compatible HTTP (set LLM_API_KEY in /etc/agentbridge/bot.env):
 #Environment=LLM_BASE_URL=https://api.groq.com/openai/v1
 #Environment=LLM_MODEL=llama-3.3-70b-versatile
-#
-#   OpenAI:
-#Environment=LLM_BASE_URL=https://api.openai.com/v1
-#Environment=LLM_MODEL=gpt-4o
 
 # Bridge
 Environment=AGENTBRIDGE_URL=ws://172.31.141.155:7890
