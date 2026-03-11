@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from .models import Agent, Artifact, Message, Thread, ThreadSummary
+from .models import Agent, Artifact, ContentBlock, Message, Thread, ThreadSummary
 
 DB_DIR = Path.home() / ".agentbridge"
 DB_PATH = DB_DIR / "messages.db"
@@ -126,6 +126,14 @@ class MessageStore:
                     value TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS agent_memory (
+                    agent_name TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (agent_name, key)
+                );
             """)
             self._conn.commit()
 
@@ -154,6 +162,8 @@ class MessageStore:
                     ON agent_requests(correlation_id);
                 CREATE INDEX IF NOT EXISTS idx_agent_requests_expires
                     ON agent_requests(expires_at, status);
+                CREATE INDEX IF NOT EXISTS idx_agent_memory_agent
+                    ON agent_memory(agent_name);
             """)
             self._conn.commit()
 
@@ -186,6 +196,7 @@ class MessageStore:
                 ("artifacts", "ALTER TABLE messages ADD COLUMN artifacts TEXT DEFAULT '[]'"),
                 ("correlation_id", "ALTER TABLE messages ADD COLUMN correlation_id TEXT"),
                 ("claimed_by", "ALTER TABLE messages ADD COLUMN claimed_by TEXT"),
+                ("blocks", "ALTER TABLE messages ADD COLUMN blocks TEXT DEFAULT '[]'"),
             ]:
                 if col not in msg_cols:
                     self._conn.execute(ddl)
@@ -203,6 +214,17 @@ class MessageStore:
                     expires_at TEXT NOT NULL,
                     response TEXT,
                     responded_at TEXT
+                )
+            """)
+            # Create agent_memory table if missing (migration-safe)
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_memory (
+                    agent_name TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (agent_name, key)
                 )
             """)
             self._conn.commit()
@@ -245,11 +267,12 @@ class MessageStore:
         event_type: str = "note.text", metadata: dict | None = None,
         labels: list[str] | None = None,
         correlation_id: str | None = None,
+        blocks: list[dict] | None = None,
     ) -> Message:
         return await self._run_in_thread(
             self.add_message,
             sender, content, recipient, thread, msg_type, artifacts, actor_id, actor_type,
-            target_id, target_type, event_type, metadata, labels, correlation_id,
+            target_id, target_type, event_type, metadata, labels, correlation_id, blocks,
         )
 
     async def read_messages_async(
@@ -535,11 +558,14 @@ class MessageStore:
         event_type: str = "note.text", metadata: dict | None = None,
         labels: list[str] | None = None,
         correlation_id: str | None = None,
+        blocks: list[dict] | None = None,
     ) -> Message:
         artifact_objs = [Artifact(**a) for a in (artifacts or [])]
+        block_objs = [ContentBlock(**b) for b in (blocks or [])]
         msg = Message(
             sender=sender, content=content, recipient=recipient,
             thread=thread, msg_type=msg_type, artifacts=artifact_objs,
+            blocks=block_objs,
             actor_id=actor_id, actor_type=actor_type,
             target_id=target_id, target_type=target_type,
             event_type=event_type, metadata=metadata or {},
@@ -548,13 +574,14 @@ class MessageStore:
         )
         with self._lock:
             self._conn.execute(
-                "INSERT INTO messages (id, actor_id, actor_type, target_id, target_type, event_type, metadata, labels, sender, recipient, thread, content, msg_type, mentions, artifacts, correlation_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO messages (id, actor_id, actor_type, target_id, target_type, event_type, metadata, labels, sender, recipient, thread, content, msg_type, mentions, artifacts, blocks, correlation_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     msg.id, msg.actor_id, msg.actor_type, msg.target_id, msg.target_type,
                     msg.event_type, json.dumps(msg.metadata), json.dumps(msg.labels),
                     msg.sender, msg.recipient, msg.thread, msg.content,
                     msg.msg_type, json.dumps(msg.mentions),
                     json.dumps([a.model_dump() for a in msg.artifacts]),
+                    json.dumps([b.model_dump() for b in msg.blocks]),
                     msg.correlation_id,
                     msg.timestamp.isoformat(),
                 ),
@@ -578,7 +605,7 @@ class MessageStore:
             except ValueError:
                 return value
 
-        query = "SELECT id, actor_id, actor_type, target_id, target_type, event_type, metadata, labels, sender, recipient, thread, content, msg_type, mentions, artifacts, correlation_id, timestamp FROM messages WHERE 1=1"
+        query = "SELECT id, actor_id, actor_type, target_id, target_type, event_type, metadata, labels, sender, recipient, thread, content, msg_type, mentions, artifacts, blocks, correlation_id, timestamp FROM messages WHERE 1=1"
         params: list = []
 
         if thread:
@@ -628,8 +655,9 @@ class MessageStore:
                 msg_type=r[12] or "chat",
                 mentions=json.loads(r[13]) if r[13] else [],
                 artifacts=[Artifact(**a) for a in json.loads(r[14])] if r[14] else [],
-                correlation_id=r[15],
-                timestamp=datetime.fromisoformat(r[16]),
+                blocks=[ContentBlock(**b) for b in json.loads(r[15])] if r[15] else [],
+                correlation_id=r[16],
+                timestamp=datetime.fromisoformat(r[17]),
             )
             for r in reversed(rows)
         ]
@@ -905,3 +933,81 @@ class MessageStore:
             if include_threads:
                 self._conn.execute("DELETE FROM threads")
             self._conn.commit()
+
+    # --- Agent Memory ---
+
+    def memory_set(self, agent_name: str, key: str, value: str) -> dict:
+        """Upsert a memory entry for an agent."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO agent_memory (agent_name, key, value, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(agent_name, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (agent_name, key, value, now, now),
+            )
+            self._conn.commit()
+        return {"agent_name": agent_name, "key": key, "value": value, "updated_at": now}
+
+    def memory_get(self, agent_name: str, key: str) -> dict | None:
+        """Retrieve a single memory entry."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value, created_at, updated_at FROM agent_memory WHERE agent_name = ? AND key = ?",
+                (agent_name, key),
+            ).fetchone()
+        if not row:
+            return None
+        return {"agent_name": agent_name, "key": key, "value": row[0], "created_at": row[1], "updated_at": row[2]}
+
+    def memory_list(self, agent_name: str) -> list[dict]:
+        """List all memory entries for an agent."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT key, value, created_at, updated_at FROM agent_memory WHERE agent_name = ? ORDER BY key ASC",
+                (agent_name,),
+            ).fetchall()
+        return [
+            {"agent_name": agent_name, "key": r[0], "value": r[1], "created_at": r[2], "updated_at": r[3]}
+            for r in rows
+        ]
+
+    def memory_delete(self, agent_name: str, key: str) -> bool:
+        """Delete a single memory entry. Returns True if deleted."""
+        with self._lock:
+            result = self._conn.execute(
+                "DELETE FROM agent_memory WHERE agent_name = ? AND key = ?",
+                (agent_name, key),
+            )
+            self._conn.commit()
+        return result.rowcount > 0
+
+    def memory_search(self, agent_name: str, query: str) -> list[dict]:
+        """Case-insensitive substring search across keys and values."""
+        pattern = f"%{query}%"
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT key, value, created_at, updated_at FROM agent_memory WHERE agent_name = ? AND (key LIKE ? OR value LIKE ?) ORDER BY key ASC",
+                (agent_name, pattern, pattern),
+            ).fetchall()
+        return [
+            {"agent_name": agent_name, "key": r[0], "value": r[1], "created_at": r[2], "updated_at": r[3]}
+            for r in rows
+        ]
+
+    async def memory_set_async(self, agent_name: str, key: str, value: str) -> dict:
+        return await self._run_in_thread(self.memory_set, agent_name, key, value)
+
+    async def memory_get_async(self, agent_name: str, key: str) -> dict | None:
+        return await self._run_in_thread(self.memory_get, agent_name, key)
+
+    async def memory_list_async(self, agent_name: str) -> list[dict]:
+        return await self._run_in_thread(self.memory_list, agent_name)
+
+    async def memory_delete_async(self, agent_name: str, key: str) -> bool:
+        return await self._run_in_thread(self.memory_delete, agent_name, key)
+
+    async def memory_search_async(self, agent_name: str, query: str) -> list[dict]:
+        return await self._run_in_thread(self.memory_search, agent_name, query)

@@ -91,15 +91,28 @@ class WebSocketConnectionManager:
             raise ValueError(f"Agent '{agent_name}' not connected via WebSocket")
         await conn.send_json(message)
 
-    async def broadcast(self, message: dict, exclude: str | None = None):
-        """Send a message to all connected agents."""
+    async def broadcast(
+        self,
+        message: dict,
+        exclude: str | None = None,
+        thread: str | None = None,
+        event_type: str | None = None,
+    ):
+        """Send a message to all connected agents, respecting subscription filters."""
         async with self.lock:
             targets = [(name, conn) for name, conn in self.connections.items() if name != exclude]
         for name, conn in targets:
+            if not conn.wants_event(thread=thread, event_type=event_type):
+                continue
             try:
                 await conn.send_json(message)
             except Exception as e:
                 logger.warning(f"Broadcast failed for {name}: {e}")
+
+    async def handle_stream_event(self, sender: str, event_type: str, data: dict):
+        """Broadcast a streaming event to all connections that want it."""
+        thread = data.get("thread", "general")
+        await self.broadcast(data, exclude=sender, thread=thread, event_type=event_type)
 
     async def request(
         self,
@@ -199,6 +212,9 @@ class WebSocketConnection:
         self.ws = ws
         self.manager = manager
         self.request_handlers: dict[str, Callable] = {}
+        # Event subscription filters (None = receive all)
+        self._subscribed_threads: set[str] | None = None    # None = all threads
+        self._subscribed_event_types: set[str] | None = None  # None = all types
 
     async def send_json(self, data: dict):
         try:
@@ -209,6 +225,26 @@ class WebSocketConnection:
 
     def on_request(self, handler: Callable[[dict], Coroutine]):
         self.request_handlers["default"] = handler
+
+    def wants_event(self, thread: str | None = None, event_type: str | None = None) -> bool:
+        """Return True if this connection should receive an event with the given filters."""
+        if self._subscribed_threads is not None and thread is not None:
+            if thread not in self._subscribed_threads:
+                return False
+        if self._subscribed_event_types is not None and event_type is not None:
+            if event_type not in self._subscribed_event_types:
+                return False
+        return True
+
+    def subscribe(self, threads: list[str] | None = None, event_types: list[str] | None = None):
+        """Narrow the event subscription. Pass None to subscribe to all."""
+        self._subscribed_threads = set(threads) if threads is not None else None
+        self._subscribed_event_types = set(event_types) if event_types is not None else None
+
+    def unsubscribe_all(self):
+        """Reset to receive all events (default)."""
+        self._subscribed_threads = None
+        self._subscribed_event_types = None
 
     async def handle_message(self, data: dict):
         msg_type = data.get("type", "message")
@@ -234,6 +270,18 @@ class WebSocketConnection:
                         "content": str(e),
                         "status": "error",
                     })
+        elif msg_type == "subscribe":
+            # Client requests filtered event delivery
+            threads = data.get("threads")  # list[str] | null
+            event_types = data.get("event_types")  # list[str] | null
+            self.subscribe(threads=threads, event_types=event_types)
+            await self.send_json({"type": "subscribed", "threads": threads, "event_types": event_types})
+        elif msg_type == "unsubscribe":
+            self.unsubscribe_all()
+            await self.send_json({"type": "unsubscribed"})
+        elif msg_type in ("stream_start", "stream_chunk", "stream_end"):
+            # Forward streaming events to the manager for broadcast
+            await self.manager.handle_stream_event(self.agent_name, msg_type, data)
 
 
 # Global manager instance

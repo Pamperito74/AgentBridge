@@ -20,7 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from .models import MESSAGE_TYPES, Message
+from .models import MESSAGE_TYPES, ContentBlock, Message
+from .rate_limit import get_rate_limiter
 from .schema_registry import SchemaRegistry, SchemaValidationError
 from .store import MessageStore
 from .ws_manager import get_ws_manager
@@ -246,7 +247,7 @@ async def lifespan(app: FastAPI):
             store = None
 
 
-http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
+http_app = FastAPI(title="AgentBridge", version="0.5.0", lifespan=lifespan)
 
 
 @http_app.middleware("http")
@@ -301,6 +302,18 @@ class ArtifactRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class ContentBlockRequest(BaseModel):
+    type: str = Field(default="text", max_length=64)
+    content: str = Field(min_length=1, max_length=40000)
+    language: str | None = Field(default=None, max_length=64)
+    mime_type: str | None = Field(default=None, max_length=128)
+    title: str | None = Field(default=None, max_length=256)
+
+
+class MemorySetRequest(BaseModel):
+    value: str = Field(min_length=0, max_length=100000)
+
+
 class SendMessageRequest(BaseModel):
     sender: str = Field(min_length=1, max_length=128)
     content: str = Field(min_length=1, max_length=10000)
@@ -308,6 +321,7 @@ class SendMessageRequest(BaseModel):
     thread: str = Field(default="general", min_length=1, max_length=128)
     msg_type: Literal["chat", "request", "response", "status", "alert"] = "chat"
     artifacts: list[ArtifactRequest] | None = None
+    blocks: list[ContentBlockRequest] | None = None
     correlation_id: str | None = None
 
 
@@ -531,7 +545,10 @@ async def http_respond_to_agent_request(name: str, request_id: str, body: AgentR
 # --- Messages ---
 
 @http_app.post("/messages")
-async def http_send_message(body: SendMessageRequest):
+async def http_send_message(request: Request, body: SendMessageRequest):
+    # Rate limit: 30 msg/s per sender, burst 60
+    if not get_rate_limiter().acquire(f"send:{body.sender}", rate=30.0, burst=60.0):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — slow down")
     correlation_id = body.correlation_id
     if body.msg_type == "request" and not correlation_id:
         correlation_id = str(uuid.uuid4())
@@ -542,6 +559,7 @@ async def http_send_message(body: SendMessageRequest):
         thread=body.thread,
         msg_type=body.msg_type,
         artifacts=[a.model_dump() for a in body.artifacts] if body.artifacts else None,
+        blocks=[b.model_dump() for b in body.blocks] if body.blocks else None,
         correlation_id=correlation_id,
     )
     result = msg.model_dump(mode="json")
@@ -622,7 +640,10 @@ async def http_claim_message(message_id: str, body: ClaimRequest):
 
 
 @http_app.post("/bus/events")
-async def http_send_event(body: EventWriteRequest):
+async def http_send_event(request: Request, body: EventWriteRequest):
+    # Rate limit: 100 events/s per actor, burst 200
+    if not get_rate_limiter().acquire(f"event:{body.actor_id}", rate=100.0, burst=200.0):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — slow down")
     try:
         schema_registry.validate(body.event_type, body.metadata)
     except SchemaValidationError as e:
@@ -715,6 +736,37 @@ async def http_set_cursor(body: CursorRequest):
         timestamp,
     )
     return {"ok": True}
+
+
+# --- Agent Memory ---
+
+@http_app.put("/agents/{name}/memory/{key}", status_code=200)
+async def http_memory_set(name: str, key: str, body: MemorySetRequest):
+    """Upsert a persistent memory entry for an agent (key-value store)."""
+    result = await get_store().memory_set_async(name, key, body.value)
+    return result
+
+
+@http_app.get("/agents/{name}/memory/{key}")
+async def http_memory_get(name: str, key: str):
+    entry = await get_store().memory_get_async(name, key)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Memory key not found")
+    return entry
+
+
+@http_app.get("/agents/{name}/memory")
+async def http_memory_list(name: str, q: str | None = Query(None)):
+    if q:
+        return await get_store().memory_search_async(name, q)
+    return await get_store().memory_list_async(name)
+
+
+@http_app.delete("/agents/{name}/memory/{key}", status_code=204)
+async def http_memory_delete(name: str, key: str):
+    deleted = await get_store().memory_delete_async(name, key)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory key not found")
 
 
 @http_app.get("/bus/schemas")
@@ -866,7 +918,7 @@ async def health():
         auth_mode = "token"
     else:
         auth_mode = "open"
-    return {"status": "ok", "version": "0.4.0", "auth": auth_mode}
+    return {"status": "ok", "version": "0.5.0", "auth": auth_mode}
 
 
 # ── Auth endpoints ────────────────────────────────────────────────────
@@ -1084,6 +1136,36 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                     except ValueError:
                         pass
+
+            elif msg_type in ("stream_start", "stream_chunk", "stream_end"):
+                # Streaming events: broadcast to other connected agents, broadcast SSE
+                stream_payload = {
+                    "type": msg_type,
+                    "sender": agent_name,
+                    "stream_id": message.get("stream_id", ""),
+                    "thread": message.get("thread", "general"),
+                    "content": message.get("content", ""),
+                    "recipient": message.get("recipient"),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                _broadcast_sse(msg_type, stream_payload)
+                await manager.broadcast(
+                    stream_payload,
+                    exclude=agent_name,
+                    thread=stream_payload["thread"],
+                    event_type=msg_type,
+                )
+                if msg_type == "stream_end":
+                    # Persist the completed stream as a regular message
+                    stored = get_store().add_message(
+                        sender=agent_name,
+                        content=message.get("content", ""),
+                        recipient=message.get("recipient"),
+                        thread=message.get("thread", "general"),
+                        msg_type="chat",
+                        metadata={"stream_id": message.get("stream_id", ""), "streamed": True},
+                    )
+                    _broadcast_sse("message", stored.model_dump(mode="json"))
 
             elif msg_type == "heartbeat":
                 get_store().heartbeat(
@@ -1762,6 +1844,85 @@ def thread_summary(name: str) -> str:
         f"last activity {last}\n"
         f"Last: {s.last_message_preview}"
     )
+
+
+# ── MCP Memory Tools ────────────────────────────────────────────────
+
+@mcp.tool()
+def memory_set(agent_name: str, key: str, value: str) -> str:
+    """Persist a key-value memory entry for this agent.
+
+    Use to store facts, preferences, or context that should survive across
+    conversation turns. Values are plain text (stringify JSON if needed).
+    Example: memory_set('claude-ct1', 'preferred_language', 'TypeScript')
+    """
+    if _remote_url():
+        _rhttp("PUT", f"/agents/{agent_name}/memory/{key}", {"value": value})
+        return f"Memory set: {agent_name}[{key}]"
+    get_store().memory_set(agent_name, key, value)
+    return f"Memory set: {agent_name}[{key}]"
+
+
+@mcp.tool()
+def memory_get(agent_name: str, key: str) -> str:
+    """Retrieve a stored memory entry for this agent.
+
+    Returns the value string, or 'Key not found' if it doesn't exist.
+    """
+    if _remote_url():
+        try:
+            entry = _rhttp("GET", f"/agents/{agent_name}/memory/{key}")
+            return str(entry.get("value", "")) if isinstance(entry, dict) else "Key not found"
+        except Exception:
+            return "Key not found"
+    entry = get_store().memory_get(agent_name, key)
+    if not entry:
+        return "Key not found"
+    return entry["value"]
+
+
+@mcp.tool()
+def memory_list(agent_name: str, search: str | None = None) -> str:
+    """List all memory entries for this agent, optionally filtered by search query.
+
+    Returns key=value pairs, one per line.
+    """
+    if _remote_url():
+        params: dict = {}
+        if search:
+            params["q"] = search
+        entries = _rhttp("GET", f"/agents/{agent_name}/memory", params=params or None)
+        if not entries:
+            return "No memory entries."
+        return "\n".join(
+            f"  {e['key']} = {e['value'][:80]}{'…' if len(e.get('value','')) > 80 else ''}"
+            for e in (entries if isinstance(entries, list) else [])
+        )
+    if search:
+        entries = get_store().memory_search(agent_name, search)
+    else:
+        entries = get_store().memory_list(agent_name)
+    if not entries:
+        return "No memory entries."
+    return "\n".join(
+        f"  {e['key']} = {e['value'][:80]}{'…' if len(e['value']) > 80 else ''}"
+        for e in entries
+    )
+
+
+@mcp.tool()
+def memory_delete(agent_name: str, key: str) -> str:
+    """Delete a stored memory entry for this agent."""
+    if _remote_url():
+        try:
+            _rhttp("DELETE", f"/agents/{agent_name}/memory/{key}")
+        except Exception:
+            return f"Key '{key}' not found for agent '{agent_name}'"
+        return f"Deleted: {agent_name}[{key}]"
+    deleted = get_store().memory_delete(agent_name, key)
+    if not deleted:
+        return f"Key '{key}' not found for agent '{agent_name}'"
+    return f"Deleted: {agent_name}[{key}]"
 
 
 # ── Entry point ─────────────────────────────────────────────────────

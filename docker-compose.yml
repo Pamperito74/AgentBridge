@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  agentbridge:
+    build: .
+    ports:
+      - "7890:7890"
+    volumes:
+      - agentbridge-data:/data
+    environment:
+      # Required: set a strong token to protect the API
+      AGENTBRIDGE_TOKEN: ${AGENTBRIDGE_TOKEN:-}
+      # Optional: swap in Redis pub/sub for multi-instance deployments
+      # AGENTBRIDGE_REDIS_URL: redis://redis:6379/0
+    restart: unless-stopped
+
+  # Uncomment to enable Redis pub/sub (multi-instance / horizontal scale)
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+
+volumes:
+  agentbridge-data:
+  # redis-data:
