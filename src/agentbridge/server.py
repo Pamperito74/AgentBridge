@@ -87,6 +87,13 @@ def _get_auth_token() -> str:
     return _auth_token or os.environ.get("AGENTBRIDGE_TOKEN", "")
 
 
+def _agent_active_window_sec() -> int:
+    try:
+        return int(os.environ.get("AGENTBRIDGE_ACTIVE_WINDOW_SEC", "300"))
+    except ValueError:
+        return 300
+
+
 def _setup_logging() -> logging.Logger:
     logger = logging.getLogger("agentbridge")
     if logger.handlers:
@@ -325,8 +332,16 @@ async def http_register_agent(body: RegisterAgentRequest):
 
 
 @http_app.get("/agents")
-async def http_list_agents():
+async def http_list_agents(active: bool = Query(False)):
     agents = await get_store().list_agents_async()
+    if active:
+        now = datetime.now(timezone.utc)
+        window = _agent_active_window_sec()
+        manager = get_ws_manager()
+        agents = [
+            a for a in agents
+            if manager.is_connected(a.name) or (now - a.last_seen).total_seconds() <= window
+        ]
     return [a.model_dump(mode="json") for a in agents]
 
 
@@ -926,6 +941,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if agent_name:
             await manager.unregister_connection(agent_name)
+            await get_store().remove_agent_async(agent_name)
+            _broadcast_sse("agent_left", {"name": agent_name})
             logger.info(f"Agent {agent_name} disconnected")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON from {agent_name}: {e}")
@@ -933,6 +950,8 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error for {agent_name}: {e}")
         if agent_name:
             await manager.unregister_connection(agent_name)
+            await get_store().remove_agent_async(agent_name)
+            _broadcast_sse("agent_left", {"name": agent_name})
 
 
 # ── MCP Server (FastMCP) ───────────────────────────────────────────

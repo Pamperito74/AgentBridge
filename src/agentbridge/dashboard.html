@@ -2298,7 +2298,7 @@ async function registerSelf() {
   if (!name || name === selfName) return;
   selfName = name;
   try {
-    await api('/agents', {
+    await api('/agents?active=1', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2868,6 +2868,12 @@ function connectSSE() {
     renderAgents();
     addSystemMsg(`${a.name} was kicked`);
   });
+  es.addEventListener('agent_left', e => {
+    const a = JSON.parse(e.data);
+    agents = agents.filter(x => x.name !== a.name);
+    renderAgents();
+    addSystemMsg(`${a.name} left`);
+  });
 
   es.addEventListener('thread_created', e => {
     const t = JSON.parse(e.data);
@@ -3342,7 +3348,7 @@ async function startApp() {
     updateUserCard();
     setInterval(heartbeatSelf, 30000);
     await Promise.all([
-      api('/agents').then(a => { agents = a; renderAgents(); }),
+      api('/agents?active=1').then(a => { agents = a; renderAgents(); }),
       api('/threads').then(t => { threads = t; renderThreads(); }),
     ]);
     updateThreadHeader();
