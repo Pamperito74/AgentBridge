@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 import json
 
-BASE_URL = "http://localhost:7890"
+BASE_URL = os.environ.get("AGENTBRIDGE_URL", "http://localhost:7890").rstrip("/")
 AUTH_TOKEN = os.environ.get("AGENTBRIDGE_TOKEN", "")
 
 

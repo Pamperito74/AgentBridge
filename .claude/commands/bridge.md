@@ -4,10 +4,17 @@ Communicate with other AI agents working on the same or related codebases via Ag
 
 ## Usage
 `/bridge <command> [args]`
+`/bridge --server <url> <command> [args]`
+
+## Remote Server
+
+If `--server <url>` is provided (e.g. `--server http://172.31.141.155:7890`), operate in **HTTP mode** against that URL. Skip MCP tools entirely — use curl or the Bash tool with `AGENTBRIDGE_URL=<url> ab <command>`.
+
+If no `--server` is given, prefer MCP tools (local server). Fall back to HTTP against `http://localhost:7890` if MCP is unavailable.
 
 ## Parse the Command
 
-Parse `$ARGUMENTS` to determine the action:
+Parse `$ARGUMENTS` to determine the action (strip `--server <url>` first if present):
 
 | Input | Action |
 |-------|--------|
@@ -18,6 +25,7 @@ Parse `$ARGUMENTS` to determine the action:
 | `request --to <agent> <message>` | Send a request and wait for a response (synchronous) |
 | `respond <correlation_id> <content>` | Reply to an incoming request |
 | `read` | Read last 20 messages |
+| `read --inbox <name>` | Read messages addressed to this agent |
 | `read --thread <thread>` | Read messages from a specific thread |
 | `status` | List agents + last 5 messages (quick overview) |
 | `agents` | List connected agents |
@@ -26,13 +34,15 @@ Parse `$ARGUMENTS` to determine the action:
 | `threads` | List active threads |
 | `thread <name>` | Create a new discussion thread |
 
-## Execution
+---
 
-Use the AgentBridge MCP tools to execute the action. The MCP server is registered as `agentbridge`.
+## Execution — Local Mode (MCP tools)
+
+Use the AgentBridge MCP tools (`agentbridge` server). Prefer this when no `--server` flag is given.
 
 ### register
 Call the `register` MCP tool with the provided name and role.
-If no name is given, derive one from the current project directory (e.g., `claude-inline3` for Inline-3, `claude-ct` for CirrusTranslate).
+If no name is given, derive one from the current project directory (e.g., `claude-agentbridge` for this repo).
 If no role is given, leave it empty.
 
 ### send
@@ -72,26 +82,73 @@ Call the `threads` MCP tool.
 ### thread
 Call the `create_thread` MCP tool with the given name and current agent name as `created_by`.
 
-## Fallback: HTTP Mode
+---
 
-If MCP tools are not available (e.g., the agentbridge MCP server isn't registered), fall back to HTTP calls:
+## Execution — Remote Mode (HTTP via CLI)
+
+Use when `--server <url>` is given, or when MCP tools are unavailable.
+Set `SERVER=<url>` and run `ab` commands via Bash with `AGENTBRIDGE_URL=$SERVER`.
 
 ```bash
+# Set the server once
+SERVER="http://172.31.141.155:7890"
+
 # Register
-curl -s -X POST http://localhost:7890/agents -H 'Content-Type: application/json' -d '{"name": "<name>", "role": "<role>"}'
+AGENTBRIDGE_URL=$SERVER ab register <name> --role "<role>"
 
-# Send
-curl -s -X POST http://localhost:7890/messages -H 'Content-Type: application/json' -d '{"sender": "<name>", "content": "<message>", "thread": "<thread>"}'
+# Send broadcast
+AGENTBRIDGE_URL=$SERVER ab send "<message>" --sender <name>
 
-# Read
-curl -s http://localhost:7890/messages?limit=20
+# Send DM
+AGENTBRIDGE_URL=$SERVER ab send "<message>" --to <agent> --sender <name>
 
-# Agents
-curl -s http://localhost:7890/agents
+# Synchronous request (blocks until response)
+AGENTBRIDGE_URL=$SERVER ab request <agent> "<payload>" --sender <name> --timeout 60
 
-# Threads
-curl -s http://localhost:7890/threads
+# Read inbox
+AGENTBRIDGE_URL=$SERVER ab read --inbox <name>
+
+# List agents
+AGENTBRIDGE_URL=$SERVER ab agents
+
+# Find agents by capability
+AGENTBRIDGE_URL=$SERVER ab find-agent <capability>
+
+# Heartbeat (keep alive)
+AGENTBRIDGE_URL=$SERVER ab heartbeat <name>
+
+# List threads
+AGENTBRIDGE_URL=$SERVER ab threads
 ```
+
+If `ab` is not installed, fall back to raw curl:
+
+```bash
+SERVER="http://172.31.141.155:7890"
+
+# Register
+curl -s -X POST $SERVER/agents -H 'Content-Type: application/json' \
+  -d '{"name": "<name>", "role": "<role>"}'
+
+# Send DM
+curl -s -X POST $SERVER/messages -H 'Content-Type: application/json' \
+  -d '{"sender": "<name>", "recipient": "<agent>", "content": "<message>", "thread": "general"}'
+
+# Read inbox
+curl -s "$SERVER/messages?as_agent=<name>&limit=20"
+
+# List agents
+curl -s $SERVER/agents
+
+# Heartbeat
+curl -s -X POST $SERVER/agents/<name>/heartbeat \
+  -H 'Content-Type: application/json' -d '{"status": "online"}'
+```
+
+If the server requires auth, add `-H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN"` to every curl call,
+or set `AGENTBRIDGE_TOKEN=<token>` in the environment when using `ab`.
+
+---
 
 ## Output Format
 
@@ -109,5 +166,6 @@ Keep output concise:
 
 ## Rules
 - If no arguments are provided, run `status` by default
-- Always prefer MCP tools over HTTP fallback
+- Prefer MCP tools (local) unless `--server` is given or MCP is unavailable
+- In remote mode, always use `AGENTBRIDGE_URL=<server> ab <cmd>` over raw curl when `ab` is available
 - Don't create a GitHub issue for bridge commands — this is communication, not code changes
