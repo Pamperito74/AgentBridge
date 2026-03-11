@@ -38,6 +38,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -49,17 +50,31 @@ AGENT_NAME = os.environ.get("EXECUTOR_NAME", "task-executor")
 POLL_INTERVAL = int(os.environ.get("EXECUTOR_POLL_INTERVAL", "3"))
 AIDER_MODEL = os.environ.get("AIDER_MODEL", "ollama/qwen2.5-coder:7b")
 HEARTBEAT_INTERVAL = 30  # seconds — well within the 4h agent TTL
+MAX_WORKERS = int(os.environ.get("EXECUTOR_MAX_WORKERS", "4"))
+MAX_QUEUE = int(os.environ.get("EXECUTOR_MAX_QUEUE", "32"))
 
 # Maximum bytes captured from stdout / stderr to avoid flooding the bridge
 STDOUT_CAP = 4000
 STDERR_CAP = 1000
 SHELL_TIMEOUT = 120  # seconds
 
-CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "test"]
+CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "gemini", "test"]
 
 # Cursor: ID of the last message we processed.
 # Loaded from the server's delivery_cursors table on startup so restarts don't reprocess old messages.
 _last_message_id: str | None = None
+
+# Thread pool for parallel task execution.
+_pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+
+# Active/queued task counters for backpressure and heartbeat status.
+_active_tasks = 0
+_queued_tasks = 0
+_active_lock = threading.Lock()
+
+# Heartbeat control
+_hb_stop = threading.Event()
+_hb_thread: threading.Thread | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -124,13 +139,25 @@ def claim_message(msg_id: str) -> bool:
 
 
 def _heartbeat_loop() -> None:
-    """Background thread: send heartbeat every HEARTBEAT_INTERVAL seconds."""
-    while True:
-        time.sleep(HEARTBEAT_INTERVAL)
+    """Background thread: send heartbeat every HEARTBEAT_INTERVAL seconds.
+
+    Reports busy status when tasks are in flight so the UI shows activity.
+    """
+    while not _hb_stop.is_set():
+        _hb_stop.wait(HEARTBEAT_INTERVAL)
+        if _hb_stop.is_set():
+            break
+        with _active_lock:
+            active = _active_tasks
+            queued = _queued_tasks
+        status = "busy" if active > 0 else "online"
+        working_on = ""
+        if active or queued:
+            working_on = f"{active} active / {queued} queued (max {MAX_WORKERS})"
         try:
             requests.post(
                 f"{BRIDGE}/agents/{AGENT_NAME}/heartbeat",
-                json={"status": "online", "working_on": ""},
+                json={"status": status, "working_on": working_on},
                 timeout=5,
             )
         except requests.RequestException:
@@ -138,8 +165,9 @@ def _heartbeat_loop() -> None:
 
 
 def start_heartbeat() -> None:
-    t = threading.Thread(target=_heartbeat_loop, daemon=True)
-    t.start()
+    global _hb_thread
+    _hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+    _hb_thread.start()
 
 
 def poll_messages() -> list[dict]:
@@ -189,6 +217,7 @@ def reply(sender: str, result: dict, correlation_id: str | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 def handle(msg: dict) -> None:
+    """Validate the message and dispatch to the thread pool quickly."""
     # Only process chat/request messages — skip status, alert, response, etc.
     msg_type = msg.get("msg_type", "chat")
     if msg_type not in ("chat", "request"):
@@ -219,10 +248,33 @@ def handle(msg: dict) -> None:
         return
 
     task_type = task.get("type", "")
-    print(f"[executor] Task '{task_type}' from '{sender}'" +
-          (f" [corr={correlation_id[:8]}]" if correlation_id else ""))
+    with _active_lock:
+        if _active_tasks + _queued_tasks >= (MAX_WORKERS + MAX_QUEUE):
+            reply(sender, {"success": False, "error": "Executor is busy. Try again soon."},
+                  correlation_id=correlation_id)
+            return
+        _queued_tasks += 1
+    print(f"[executor] Queuing task '{task_type}' from '{sender}'" +
+          (f" [corr={correlation_id[:8]}]" if correlation_id else "") +
+          f" (active={_active_tasks}, queued={_queued_tasks}, max={MAX_WORKERS})")
+    _pool.submit(_execute, sender, task_type, task, correlation_id)
 
-    result = dispatch(task_type, task)
+
+def _execute(sender: str, task_type: str, task: dict, correlation_id: str | None) -> None:
+    """Run a task in a worker thread and reply when done."""
+    global _active_tasks, _queued_tasks
+    with _active_lock:
+        _queued_tasks -= 1
+        _active_tasks += 1
+    try:
+        result = dispatch(task_type, task)
+        print(f"[executor] Done '{task_type}' from '{sender}' — "
+              f"{'ok' if result.get('success') else 'FAILED'}")
+    except Exception as exc:  # noqa: BLE001
+        result = {"success": False, "error": f"Unhandled exception: {exc}"}
+    finally:
+        with _active_lock:
+            _active_tasks -= 1
     reply(sender, result, correlation_id=correlation_id)
 
 
@@ -232,6 +284,7 @@ def dispatch(task_type: str, task: dict) -> dict:
         "git_commit": _task_git_commit,
         "git_pr": _task_git_pr,
         "aider": _task_aider,
+        "gemini": _task_gemini,
         "test": _task_test,
     }
     handler = handlers.get(task_type)
@@ -240,10 +293,7 @@ def dispatch(task_type: str, task: dict) -> dict:
             "success": False,
             "error": f"Unknown task type '{task_type}'. Supported: {list(handlers)}",
         }
-    try:
-        return handler(task)
-    except Exception as exc:  # noqa: BLE001
-        return {"success": False, "error": f"Unhandled exception: {exc}"}
+    return handler(task)
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +364,44 @@ def _task_aider(task: dict) -> dict:
     return _run(cmd, task.get("cwd", "."))
 
 
+def _task_gemini(task: dict) -> dict:
+    """Run a Gemini CLI prompt with optional file context piped via stdin."""
+    prompt = task.get("prompt")
+    if not prompt:
+        return {"success": False, "error": "'prompt' is required for type 'gemini'"}
+    files = task.get("files", [])
+    model = task.get("model", "gemini-2.0-flash")
+    cwd = task.get("cwd", ".")
+    payload_parts = [f"PROMPT:\n{prompt}\n"]
+    for path in files:
+        try:
+            with open(os.path.join(cwd, path), "r", encoding="utf-8") as f:
+                payload_parts.append(f"\nFILE: {path}\n{f.read()}\n")
+        except OSError as exc:
+            payload_parts.append(f"\nFILE: {path}\n<error reading file: {exc}>\n")
+    payload = "\n".join(payload_parts)
+    cmd = ["gemini", "--model", model]
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=payload,
+            cwd=cwd or ".",
+            capture_output=True,
+            text=True,
+            timeout=SHELL_TIMEOUT,
+        )
+        return {
+            "success": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "stdout": proc.stdout[-STDOUT_CAP:],
+            "stderr": proc.stderr[-STDERR_CAP:],
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": f"gemini timed out after {SHELL_TIMEOUT}s"}
+    except FileNotFoundError:
+        return {"success": False, "error": "gemini CLI not found. Install: npm install -g @google/gemini-cli"}
+
+
 def _task_test(task: dict) -> dict:
     command = task.get("command", "npm test")
     return _run(command, task.get("cwd", "."))
@@ -327,19 +415,26 @@ def main() -> None:
     register()
     _load_cursor()
     start_heartbeat()
-    print(f"[executor] Polling every {POLL_INTERVAL}s — send tasks via AgentBridge to '{AGENT_NAME}'")
-    print(f"[executor] Heartbeat every {HEARTBEAT_INTERVAL}s")
+    print(f"[executor] Registered as '{AGENT_NAME}' — parallel executor")
+    print(f"[executor] Workers: {MAX_WORKERS} | Queue: {MAX_QUEUE} | Poll: {POLL_INTERVAL}s | Heartbeat: {HEARTBEAT_INTERVAL}s")
     print("[executor] Ctrl-C to stop\n")
 
-    while True:
-        messages = poll_messages()
-        for msg in messages:
-            handle(msg)
-        time.sleep(POLL_INTERVAL)
+    try:
+        while True:
+            messages = poll_messages()
+            for msg in messages:
+                handle(msg)
+            time.sleep(POLL_INTERVAL)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("\n[executor] Shutting down — waiting for in-flight tasks to complete...")
+        _hb_stop.set()
+        if _hb_thread:
+            _hb_thread.join(timeout=2)
+        _pool.shutdown(wait=True)
+        print("[executor] All tasks done. Stopped.")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[executor] Stopped.")
+    main()
