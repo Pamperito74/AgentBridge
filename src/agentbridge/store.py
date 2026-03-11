@@ -3,6 +3,7 @@ import sqlite3
 import json
 import os
 import threading
+import time
 import hashlib
 import secrets
 import binascii
@@ -147,6 +148,12 @@ class MessageStore:
                     ON messages(correlation_id);
                 CREATE INDEX IF NOT EXISTS idx_delivery_cursors_agent_thread
                     ON delivery_cursors(agent_name, thread);
+                CREATE INDEX IF NOT EXISTS idx_agent_requests_to_status
+                    ON agent_requests(to_agent, status);
+                CREATE INDEX IF NOT EXISTS idx_agent_requests_correlation
+                    ON agent_requests(correlation_id);
+                CREATE INDEX IF NOT EXISTS idx_agent_requests_expires
+                    ON agent_requests(expires_at, status);
             """)
             self._conn.commit()
 
@@ -182,6 +189,22 @@ class MessageStore:
             ]:
                 if col not in msg_cols:
                     self._conn.execute(ddl)
+            # Create agent_requests table if missing (migration-safe)
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_requests (
+                    id TEXT PRIMARY KEY,
+                    from_agent TEXT NOT NULL,
+                    to_agent TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    correlation_id TEXT NOT NULL,
+                    thread TEXT DEFAULT 'general',
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    response TEXT,
+                    responded_at TEXT
+                )
+            """)
             self._conn.commit()
 
     def _prune(self):
@@ -191,6 +214,12 @@ class MessageStore:
             agent_cutoff = (datetime.now(timezone.utc) - timedelta(hours=AGENT_TTL_HOURS)).isoformat()
             self._conn.execute("DELETE FROM agents WHERE last_seen < ?", (agent_cutoff,))
             self._conn.execute("DELETE FROM user_sessions WHERE expires_at < ?", (datetime.now(timezone.utc).isoformat(),))
+            # Expire pending requests past their deadline
+            now_iso = datetime.now(timezone.utc).isoformat()
+            self._conn.execute(
+                "UPDATE agent_requests SET status = 'timeout' WHERE status = 'pending' AND expires_at < ?",
+                (now_iso,)
+            )
             self._conn.commit()
         return None
 
@@ -753,6 +782,114 @@ class MessageStore:
             first_message_at=first_at, last_message_at=last_at,
             last_message_preview=preview,
         )
+
+    # --- Agent Requests (persistent request queue) ---
+
+    def create_agent_request(
+        self,
+        from_agent: str,
+        to_agent: str,
+        content: str,
+        timeout_sec: float = 60.0,
+        thread: str = "general",
+        correlation_id: str | None = None,
+    ) -> dict:
+        req_id = str(uuid.uuid4())
+        corr_id = correlation_id or str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(seconds=timeout_sec)).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO agent_requests (id, from_agent, to_agent, content, status, correlation_id, thread, created_at, expires_at) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+                (req_id, from_agent, to_agent, content, corr_id, thread, now.isoformat(), expires_at),
+            )
+            self._conn.commit()
+        return {
+            "id": req_id, "from_agent": from_agent, "to_agent": to_agent,
+            "content": content, "status": "pending", "correlation_id": corr_id,
+            "thread": thread, "created_at": now.isoformat(), "expires_at": expires_at,
+            "response": None, "responded_at": None,
+        }
+
+    def get_agent_request(self, request_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, from_agent, to_agent, content, status, correlation_id, thread, created_at, expires_at, response, responded_at FROM agent_requests WHERE id = ?",
+                (request_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0], "from_agent": row[1], "to_agent": row[2], "content": row[3],
+            "status": row[4], "correlation_id": row[5], "thread": row[6],
+            "created_at": row[7], "expires_at": row[8], "response": row[9], "responded_at": row[10],
+        }
+
+    def get_agent_request_by_correlation(self, correlation_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, from_agent, to_agent, content, status, correlation_id, thread, created_at, expires_at, response, responded_at FROM agent_requests WHERE correlation_id = ?",
+                (correlation_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0], "from_agent": row[1], "to_agent": row[2], "content": row[3],
+            "status": row[4], "correlation_id": row[5], "thread": row[6],
+            "created_at": row[7], "expires_at": row[8], "response": row[9], "responded_at": row[10],
+        }
+
+    def get_pending_requests(self, agent_name: str) -> list[dict]:
+        """Return all pending (non-expired) requests for an agent."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, from_agent, to_agent, content, status, correlation_id, thread, created_at, expires_at, response, responded_at FROM agent_requests WHERE to_agent = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at ASC",
+                (agent_name, now_iso)
+            ).fetchall()
+        return [
+            {
+                "id": r[0], "from_agent": r[1], "to_agent": r[2], "content": r[3],
+                "status": r[4], "correlation_id": r[5], "thread": r[6],
+                "created_at": r[7], "expires_at": r[8], "response": r[9], "responded_at": r[10],
+            }
+            for r in rows
+        ]
+
+    def respond_to_agent_request(self, request_id: str, response: str) -> bool:
+        """Mark request as answered. Returns True if it was pending, False if already handled."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE agent_requests SET status = 'answered', response = ?, responded_at = ? WHERE id = ? AND status = 'pending'",
+                (response, now_iso, request_id)
+            )
+            self._conn.commit()
+        return result.rowcount > 0
+
+    def wait_for_agent_response(self, correlation_id: str, timeout_sec: float) -> dict | None:
+        """Poll DB until the agent_request with this correlation_id is answered or times out."""
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            row = self.get_agent_request_by_correlation(correlation_id)
+            if row and row["status"] == "answered":
+                return row
+            if row and row["status"] == "timeout":
+                return None
+            time.sleep(0.4)
+        return None
+
+    async def create_agent_request_async(self, from_agent, to_agent, content, timeout_sec=60.0, thread="general", correlation_id=None):
+        return await self._run_in_thread(self.create_agent_request, from_agent, to_agent, content, timeout_sec, thread, correlation_id)
+
+    async def get_pending_requests_async(self, agent_name):
+        return await self._run_in_thread(self.get_pending_requests, agent_name)
+
+    async def get_agent_request_async(self, request_id):
+        return await self._run_in_thread(self.get_agent_request, request_id)
+
+    async def respond_to_agent_request_async(self, request_id, response):
+        return await self._run_in_thread(self.respond_to_agent_request, request_id, response)
 
     def close(self):
         if hasattr(self, "_prune_timer"):

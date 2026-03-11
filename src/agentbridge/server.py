@@ -321,6 +321,12 @@ class ClaimRequest(BaseModel):
     agent_name: str = Field(min_length=1, max_length=128)
 
 
+class AgentRespondRequest(BaseModel):
+    from_agent: str = Field(min_length=1, max_length=128)
+    content: str = Field(min_length=1, max_length=10000)
+    status: Literal["success", "error"] = "success"
+
+
 # --- Agents ---
 
 @http_app.post("/agents")
@@ -395,6 +401,82 @@ async def http_heartbeat(name: str, body: HeartbeatRequest):
     result = agent.model_dump(mode="json")
     _broadcast_sse("agent_status", result)
     return result
+
+
+# --- Agent Request Queue ---
+
+@http_app.get("/agents/{name}/requests")
+async def http_get_agent_requests(name: str):
+    """Poll pending requests for this agent.
+
+    Language-agnostic: any agent type (Python, Node, curl) can poll this endpoint
+    to receive requests without needing WebSocket or MCP tools.
+    Returns list of pending requests with correlation_id for use with respond endpoint.
+    """
+    requests = await get_store().get_pending_requests_async(name)
+    return requests
+
+
+@http_app.post("/agents/{name}/requests/{request_id}/respond")
+async def http_respond_to_agent_request(name: str, request_id: str, body: AgentRespondRequest):
+    """Respond to a pending request via HTTP.
+
+    Works for any agent type. The requester will unblock immediately if they're
+    waiting synchronously, or receive the response on their next poll.
+    """
+    req = await get_store().get_agent_request_async(request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req["to_agent"] != name:
+        raise HTTPException(status_code=403, detail="This request is not addressed to you")
+    if req["status"] != "pending":
+        raise HTTPException(status_code=409, detail=f"Request already {req['status']}")
+
+    ok = await get_store().respond_to_agent_request_async(request_id, body.content)
+    if not ok:
+        raise HTTPException(status_code=409, detail="Request already answered")
+
+    # Store response in messages table for history/SSE
+    correlation_id = req["correlation_id"]
+    msg = await get_store().add_message_async(
+        sender=name,
+        recipient=req["from_agent"],
+        content=body.content,
+        thread=req.get("thread", "general"),
+        msg_type="response",
+        correlation_id=correlation_id,
+    )
+    _broadcast_sse("message", msg.model_dump(mode="json"))
+
+    # Resolve WS future so request_agent() unblocks instantly if requester is connected
+    if _uvicorn_loop and _uvicorn_loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(
+                get_ws_manager().handle_response(correlation_id, {
+                    "content": body.content,
+                    "status": body.status,
+                }),
+                _uvicorn_loop,
+            )
+        except Exception:
+            pass
+
+    # Best-effort real-time WS delivery to requester
+    _try_ws_deliver(req["from_agent"], {
+        "type": "response",
+        "correlation_id": correlation_id,
+        "content": body.content,
+        "status": body.status,
+    })
+
+    _broadcast_sse("agent_request_answered", {
+        "request_id": request_id,
+        "from_agent": req["from_agent"],
+        "to_agent": name,
+        "correlation_id": correlation_id,
+    })
+
+    return {"ok": True, "request_id": request_id, "correlation_id": correlation_id}
 
 
 # --- Messages ---
@@ -1043,11 +1125,25 @@ def request_agent(
     Blocks until the recipient calls respond() with the matching correlation_id,
     or until timeout_sec elapses. Use this when you need an answer before continuing.
 
+    The request is persisted in the agent_requests queue — recipients can poll
+    GET /agents/{name}/requests and respond via POST /agents/{name}/requests/{id}/respond
+    regardless of transport (MCP, HTTP, WebSocket, curl, etc.).
+
     Returns the recipient's response content, or raises TimeoutError.
     """
     correlation_id = str(uuid.uuid4())
 
-    # Persist request so recipient can see it even if not WS-connected
+    # 1. Create persistent queue entry (transport-agnostic)
+    req_entry = get_store().create_agent_request(
+        from_agent=sender,
+        to_agent=recipient,
+        content=content,
+        timeout_sec=timeout_sec,
+        thread=thread,
+        correlation_id=correlation_id,
+    )
+
+    # 2. Persist in messages table for history + SSE
     msg = get_store().add_message(
         sender=sender,
         recipient=recipient,
@@ -1057,13 +1153,21 @@ def request_agent(
         correlation_id=correlation_id,
     )
     _broadcast_sse("message", msg.model_dump(mode="json"))
+    _broadcast_sse("agent_request", {
+        "request_id": req_entry["id"],
+        "from_agent": sender,
+        "to_agent": recipient,
+        "correlation_id": correlation_id,
+        "content": content,
+        "expires_at": req_entry["expires_at"],
+    })
 
-    # Notify any wait_for_request() waiter immediately
+    # 3. Notify any wait_for_request() waiter immediately
     _notify_incoming_waiter(recipient, msg.model_dump(mode="json"))
 
     manager = get_ws_manager()
     if _uvicorn_loop and _uvicorn_loop.is_running() and manager.is_connected(recipient):
-        # Fast path: runs entirely in the uvicorn loop — resolves instantly on response
+        # Fast path: WS-connected recipient — resolves instantly on response
         try:
             result = asyncio.run_coroutine_threadsafe(
                 manager.deliver_and_wait(
@@ -1071,6 +1175,7 @@ def request_agent(
                     {
                         "type": "request",
                         "correlation_id": correlation_id,
+                        "request_id": req_entry["id"],
                         "sender": sender,
                         "content": content,
                         "thread": thread,
@@ -1084,27 +1189,31 @@ def request_agent(
         except TimeoutError:
             raise TimeoutError(
                 f"No response from '{recipient}' within {timeout_sec}s "
-                f"(correlation_id={correlation_id})"
+                f"(correlation_id={correlation_id}). "
+                f"Recipient can still respond via GET /agents/{recipient}/requests"
             )
     else:
-        # Slow path: recipient not WS-connected, fall back to DB polling
+        # Slow path: poll agent_requests table (faster/more targeted than messages table)
         _try_ws_deliver(recipient, {
             "type": "request",
             "correlation_id": correlation_id,
+            "request_id": req_entry["id"],
             "sender": sender,
             "content": content,
             "thread": thread,
         })
         deadline = time.monotonic() + timeout_sec
         while time.monotonic() < deadline:
-            responses = get_store().read_messages(correlation_id=correlation_id, limit=10)
-            response = next((m for m in responses if m.msg_type == "response"), None)
-            if response:
-                return response.content
+            row = get_store().get_agent_request_by_correlation(correlation_id)
+            if row and row["status"] == "answered":
+                return row["response"]
+            if row and row["status"] == "timeout":
+                break
             time.sleep(0.4)
         raise TimeoutError(
             f"No response from '{recipient}' within {timeout_sec}s "
-            f"(correlation_id={correlation_id})"
+            f"(correlation_id={correlation_id}). "
+            f"Recipient can still respond via GET /agents/{recipient}/requests"
         )
 
 
@@ -1117,6 +1226,21 @@ def wait_for_request(agent_name: str, timeout_sec: float = 30.0) -> str:
     Returns a timeout status dict if nothing arrives within timeout_sec.
     """
     start_ts = datetime.now(timezone.utc).isoformat()
+
+    # 0. Check agent_requests queue first (persistent, transport-agnostic)
+    def _make_result_from_queue(r: dict) -> str:
+        return json.dumps({
+            "correlation_id": r["correlation_id"],
+            "request_id": r["id"],
+            "sender": r["from_agent"],
+            "content": r["content"],
+            "thread": r["thread"],
+            "timestamp": r["created_at"],
+        })
+
+    queued = get_store().get_pending_requests(agent_name)
+    if queued:
+        return _make_result_from_queue(queued[0])
 
     def _make_result(m) -> str:
         return json.dumps({

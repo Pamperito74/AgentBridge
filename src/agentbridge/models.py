@@ -62,6 +62,20 @@ class Message(BaseModel):
             self.mentions = MENTION_RE.findall(self.content)
 
 
+class AgentRequest(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    from_agent: str
+    to_agent: str
+    content: str
+    status: str = "pending"  # pending | answered | timeout | rejected
+    correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    thread: str = "general"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime
+    response: str | None = None
+    responded_at: datetime | None = None
+
+
 class Thread(BaseModel):
     name: str
     created_by: str
