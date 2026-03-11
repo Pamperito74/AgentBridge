@@ -120,6 +120,11 @@ class MessageStore:
                     expires_at TEXT NOT NULL,
                     last_used TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
             """)
             self._conn.commit()
 
@@ -463,6 +468,32 @@ class MessageStore:
         with self._lock:
             self._conn.execute("DELETE FROM user_sessions WHERE token = ?", (token,))
             self._conn.commit()
+
+    # --- Agent API Key (persistent, never expires) ---
+
+    def get_agent_key(self) -> str | None:
+        """Return the stored agent API key, or None if not set."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM settings WHERE key = 'agent_api_key'"
+            ).fetchone()
+        return row[0] if row else None
+
+    def set_agent_key(self, token: str) -> str:
+        """Store (or replace) the agent API key. Returns the token."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('agent_api_key', ?, ?)",
+                (token, now),
+            )
+            self._conn.commit()
+        return token
+
+    def verify_agent_key(self, token: str) -> bool:
+        """Return True if token matches the stored agent API key."""
+        stored = self.get_agent_key()
+        return stored is not None and secrets.compare_digest(stored, token)
 
     # --- Messages ---
 

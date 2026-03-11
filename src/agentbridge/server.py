@@ -169,8 +169,11 @@ async def auth_and_logging_middleware(request: Request, call_next):
                 request.state.user = session_user
                 request.state.is_admin = session_user["role"] == "admin"
             elif _auth_token and supplied == _auth_token:
-                # Backward-compat: AGENTBRIDGE_TOKEN for agents/scripts
+                # Backward-compat: AGENTBRIDGE_TOKEN env var on server
                 request.state.is_admin = True
+            elif await asyncio.to_thread(get_store().verify_agent_key, supplied):
+                # Persistent agent API key stored in DB — never expires
+                request.state.is_admin = False
             else:
                 return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
         else:
@@ -686,6 +689,26 @@ async def auth_logout(request: Request):
     if supplied:
         await asyncio.to_thread(get_store().delete_session, supplied)
     return {"ok": True}
+
+
+@http_app.get("/auth/agent-key")
+async def get_agent_key(request: Request):
+    """Return whether an agent API key is configured (admins only; never returns the key value)."""
+    _assert_admin(request)
+    key = await asyncio.to_thread(get_store().get_agent_key)
+    return {"configured": key is not None}
+
+
+@http_app.post("/auth/agent-key")
+async def rotate_agent_key(request: Request):
+    """Generate a new agent API key and store it. Returns the key — save it immediately.
+    Only admins can rotate the key. Agents use this key in X-AgentBridge-Token header."""
+    _assert_admin(request)
+    import secrets as _secrets
+    token = _secrets.token_hex(32)
+    await asyncio.to_thread(get_store().set_agent_key, token)
+    logger.info("Agent API key rotated by %s", getattr(request.state.user, 'username', 'admin'))
+    return {"agent_key": token, "note": "Store this in AGENTBRIDGE_TOKEN — it will not be shown again"}
 
 
 @http_app.get("/auth/me")
