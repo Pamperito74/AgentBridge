@@ -24,20 +24,30 @@ def get_script_dir():
 
 
 def load_dotenv(script_dir: Path) -> dict:
-    """Load .env file from the script directory into a copy of the environment."""
+    """Load .env file and shell profile files into a copy of the environment."""
     env = os.environ.copy()
-    env_file = script_dir / ".env"
-    if not env_file.exists():
-        return env
-    with open(env_file) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            m = re.match(r'^export\s+(\w+)=["\']?([^"\']*)["\']?$', line) or \
-                re.match(r'^(\w+)=["\']?([^"\']*)["\']?$', line)
-            if m:
-                env[m.group(1)] = m.group(2)
+
+    def _parse_file(path: Path):
+        if not path.exists():
+            return
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                m = re.match(r'^export\s+(\w+)=["\']?([^"\']*)["\']?$', line) or \
+                    re.match(r'^(\w+)=["\']?([^"\']*)["\']?$', line)
+                if m:
+                    env[m.group(1)] = m.group(2)
+
+    # Load shell profiles first (lowest priority)
+    home = Path.home()
+    for profile in [home / ".zprofile", home / ".bash_profile", home / ".profile", home / ".zshrc", home / ".bashrc"]:
+        _parse_file(profile)
+
+    # .env overrides shell profiles
+    _parse_file(script_dir / ".env")
+
     return env
 
 def get_log_file():
