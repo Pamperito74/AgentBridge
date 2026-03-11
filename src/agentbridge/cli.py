@@ -105,6 +105,71 @@ def send(content: str, recipient: str | None, thread: str, sender: str, msg_type
 
 
 @cli.command()
+@click.argument("recipient")
+@click.argument("content")
+@click.option("--sender", "-s", default="cli", help="Sender name")
+@click.option("--thread", "-t", default="general", help="Thread name")
+@click.option("--timeout", default=60, show_default=True, help="Seconds to wait for response")
+@click.option("--poll-interval", default=0.5, show_default=True, help="Polling interval in seconds")
+def request(recipient: str, content: str, sender: str, thread: str, timeout: int, poll_interval: float):
+    """Send a request to an agent and wait for their response (synchronous)."""
+    import time as _time
+
+    data = {
+        "sender": sender,
+        "recipient": recipient,
+        "content": content,
+        "thread": thread,
+        "msg_type": "request",
+    }
+    msg = _post("/messages", data)
+    correlation_id = msg.get("correlation_id")
+    if not correlation_id:
+        click.echo("Error: server did not return a correlation_id", err=True)
+        sys.exit(1)
+
+    click.echo(f"[request] Waiting for response from '{recipient}' (cid={correlation_id[:8]}…)", err=True)
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        _time.sleep(poll_interval)
+        try:
+            r = requests.get(
+                f"{BASE_URL}/messages",
+                params={"correlation_id": correlation_id, "limit": 5},
+                timeout=5,
+                headers=_headers(),
+            )
+            r.raise_for_status()
+            messages = r.json()
+        except requests.RequestException:
+            continue
+        response = next((m for m in messages if m.get("msg_type") == "response"), None)
+        if response:
+            click.echo(response["content"])
+            return
+
+    click.echo(f"Error: no response from '{recipient}' within {timeout}s", err=True)
+    sys.exit(1)
+
+
+@cli.command("find-agent")
+@click.argument("capability")
+def find_agent_cmd(capability: str):
+    """Find agents that advertise a given capability."""
+    result = _get("/agents")
+    matches = [
+        a for a in result
+        if capability in (a.get("capabilities") or [])
+    ]
+    if not matches:
+        click.echo(f"No agents found with capability '{capability}'.")
+        return
+    for a in matches:
+        role = f" ({a['role']})" if a.get("role") else ""
+        click.echo(f"  {a['name']}{role}")
+
+
+@cli.command()
 @click.option("--thread", "-t", default=None, help="Filter by thread")
 @click.option("--sender", "-s", default=None, help="Filter by sender")
 @click.option("--inbox", "-i", default=None, help="Show only messages to this agent (inbox mode)")
@@ -312,8 +377,6 @@ def events(thread: str | None, actor_id: str | None, target_id: str | None, even
         params["event_type"] = event_type
     if before:
         params["before"] = before
-    if since_id:
-        params["since_id"] = since_id
     if since_id:
         params["since_id"] = since_id
     result = _get("/bus/events", params)

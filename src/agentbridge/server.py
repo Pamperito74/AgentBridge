@@ -259,6 +259,10 @@ class CursorRequest(BaseModel):
     last_timestamp: str | None = None
 
 
+class ClaimRequest(BaseModel):
+    agent_name: str = Field(min_length=1, max_length=128)
+
+
 # --- Agents ---
 
 @http_app.post("/agents")
@@ -395,6 +399,21 @@ async def http_read_messages(
         since_id=since_id,
     )
     return [m.model_dump(mode="json") for m in messages]
+
+
+@http_app.post("/messages/{message_id}/claim")
+async def http_claim_message(message_id: str, body: ClaimRequest):
+    """Atomically claim a message for processing.
+
+    Returns 200 if the claim succeeded (this agent now owns the message).
+    Returns 409 if the message was already claimed by another agent.
+    Use this when multiple instances of the same agent type are running to
+    prevent duplicate processing.
+    """
+    success = await get_store().claim_message_async(message_id, body.agent_name)
+    if not success:
+        raise HTTPException(status_code=409, detail="Message already claimed or not found")
+    return {"ok": True, "claimed_by": body.agent_name}
 
 
 @http_app.post("/bus/events")
@@ -904,7 +923,7 @@ def request_agent(
     correlation_id = str(uuid.uuid4())
 
     # Persist request so recipient can see it even if not WS-connected
-    get_store().add_message(
+    msg = get_store().add_message(
         sender=sender,
         recipient=recipient,
         content=content,
@@ -912,8 +931,7 @@ def request_agent(
         msg_type="request",
         correlation_id=correlation_id,
     )
-    _broadcast_sse("message", {"sender": sender, "recipient": recipient, "content": content,
-                                "msg_type": "request", "correlation_id": correlation_id})
+    _broadcast_sse("message", msg.model_dump(mode="json"))
 
     # Best-effort real-time delivery via WS
     _try_ws_deliver(recipient, {

@@ -15,10 +15,14 @@ Parse `$ARGUMENTS` to determine the action:
 | `send <message>` | Broadcast a message to all agents |
 | `send --to <agent> <message>` | Send a direct message to a specific agent |
 | `send --thread <thread> <message>` | Send a message to a specific thread |
+| `request --to <agent> <message>` | Send a request and wait for a response (synchronous) |
+| `respond <correlation_id> <content>` | Reply to an incoming request |
 | `read` | Read last 20 messages |
 | `read --thread <thread>` | Read messages from a specific thread |
 | `status` | List agents + last 5 messages (quick overview) |
 | `agents` | List connected agents |
+| `find-agent <capability>` | Find agents that have a specific capability |
+| `heartbeat [name]` | Send a heartbeat to stay alive (default: current agent name) |
 | `threads` | List active threads |
 | `thread <name>` | Create a new discussion thread |
 
@@ -34,6 +38,23 @@ If no role is given, leave it empty.
 ### send
 Call the `send` MCP tool. Use the current registered agent name as `sender`.
 If `--to` is specified, set `recipient`. If `--thread` is specified, set `thread`.
+
+### request
+Call the `request_agent` MCP tool with `sender` (current agent name), `recipient` (from `--to`), and `content`.
+This blocks until the recipient responds or times out (default 60s).
+Display the response content when it arrives.
+
+### respond
+Call the `respond` MCP tool with `agent_name` (current agent name), `correlation_id`, and `content`.
+Use this to reply to a request received via `wait_for_request` or visible in recent messages.
+
+### find-agent
+Call the `find_agent` MCP tool with the given capability string.
+Display matching agents as `<name> (<role>)`.
+
+### heartbeat
+Call the `heartbeat` MCP tool with `name` (provided argument or current registered agent name).
+Use `status=online` and leave `working_on` empty unless you want to update the status.
 
 ### read
 Call the `read` MCP tool. Pass `thread` and `sender` filters if specified.
@@ -77,9 +98,13 @@ curl -s http://localhost:7890/threads
 Keep output concise:
 - For `register`: "Registered as <name> (<role>)"
 - For `send`: "Sent: <message>"
+- For `request`: Show "Waiting for <agent>…" then display the response content when it arrives
+- For `respond`: "Responded to <correlation_id[:8]>"
 - For `read`: Show messages as `<sender>: <content>`, one per line
 - For `status`: Show agents list, then a blank line, then recent messages
 - For `agents`: List each agent as `<name> (<role>)`
+- For `find-agent`: List matching agents as `<name> (<role>)`, or "No agents found with capability '<cap>'"
+- For `heartbeat`: "<name> [online]"
 - For `threads`: List each thread as `#<name>`
 
 ## Rules

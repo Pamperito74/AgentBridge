@@ -57,8 +57,8 @@ SHELL_TIMEOUT = 120  # seconds
 
 CAPABILITIES = ["shell", "git_commit", "git_pr", "aider", "test"]
 
-# Cursor: ID of the last message we processed (persisted in memory only).
-# AgentBridge's delivery_cursors table tracks this server-side via since_id.
+# Cursor: ID of the last message we processed.
+# Loaded from the server's delivery_cursors table on startup so restarts don't reprocess old messages.
 _last_message_id: str | None = None
 
 
@@ -79,6 +79,48 @@ def register() -> None:
     except requests.RequestException as exc:
         print(f"[executor] ERROR: could not register — is AgentBridge running? ({exc})")
         sys.exit(1)
+
+
+def _load_cursor() -> None:
+    """Load the last processed message ID from server cursors to avoid reprocessing on restart."""
+    global _last_message_id
+    try:
+        r = requests.get(f"{BRIDGE}/cursors", params={"agent": AGENT_NAME}, timeout=5)
+        r.raise_for_status()
+        cursors = r.json()
+        if cursors:
+            last_id = cursors[0].get("last_message_id")
+            if last_id:
+                _last_message_id = last_id
+                print(f"[executor] Resumed from cursor: {last_id[:8]}…")
+    except requests.RequestException:
+        pass  # No cursor yet; will start from current messages
+
+
+def _save_cursor(message_id: str, timestamp: str) -> None:
+    """Persist the cursor so the next restart resumes from here."""
+    try:
+        requests.post(
+            f"{BRIDGE}/cursors",
+            json={"agent_name": AGENT_NAME, "thread": "general",
+                  "last_message_id": message_id, "last_timestamp": timestamp},
+            timeout=5,
+        )
+    except requests.RequestException:
+        pass
+
+
+def claim_message(msg_id: str) -> bool:
+    """Atomically claim a message. Returns True if we own it, False if another instance claimed it."""
+    try:
+        r = requests.post(
+            f"{BRIDGE}/messages/{msg_id}/claim",
+            json={"agent_name": AGENT_NAME},
+            timeout=5,
+        )
+        return r.status_code == 200
+    except requests.RequestException:
+        return False
 
 
 def _heartbeat_loop() -> None:
@@ -113,7 +155,9 @@ def poll_messages() -> list[dict]:
         raw = r.json()
         messages = raw if isinstance(raw, list) else raw.get("messages", [])
         if messages:
-            _last_message_id = messages[-1]["id"]
+            last = messages[-1]
+            _last_message_id = last["id"]
+            _save_cursor(last["id"], last.get("timestamp", ""))
         return messages
     except requests.RequestException:
         return []
@@ -156,6 +200,10 @@ def handle(msg: dict) -> None:
 
     # Must be a directed message (recipient set) — ignore broadcasts/channel chat
     if msg.get("recipient") != AGENT_NAME:
+        return
+
+    # Atomically claim the message — prevents duplicate processing when multiple instances run
+    if not claim_message(msg["id"]):
         return
 
     try:
@@ -277,6 +325,7 @@ def _task_test(task: dict) -> dict:
 
 def main() -> None:
     register()
+    _load_cursor()
     start_heartbeat()
     print(f"[executor] Polling every {POLL_INTERVAL}s — send tasks via AgentBridge to '{AGENT_NAME}'")
     print(f"[executor] Heartbeat every {HEARTBEAT_INTERVAL}s")

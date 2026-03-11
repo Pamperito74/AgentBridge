@@ -173,6 +173,7 @@ class MessageStore:
                 ("mentions", "ALTER TABLE messages ADD COLUMN mentions TEXT DEFAULT '[]'"),
                 ("artifacts", "ALTER TABLE messages ADD COLUMN artifacts TEXT DEFAULT '[]'"),
                 ("correlation_id", "ALTER TABLE messages ADD COLUMN correlation_id TEXT"),
+                ("claimed_by", "ALTER TABLE messages ADD COLUMN claimed_by TEXT"),
             ]:
                 if col not in msg_cols:
                     self._conn.execute(ddl)
@@ -233,6 +234,9 @@ class MessageStore:
 
     async def message_timestamp_async(self, message_id: str) -> str | None:
         return await self._run_in_thread(self.message_timestamp, message_id)
+
+    async def claim_message_async(self, message_id: str, agent_name: str) -> bool:
+        return await self._run_in_thread(self.claim_message, message_id, agent_name)
 
     async def set_delivery_cursor_async(
         self,
@@ -556,6 +560,21 @@ class MessageStore:
                 "SELECT timestamp FROM messages WHERE id = ?", (message_id,)
             ).fetchone()
         return row[0] if row else None
+
+    def claim_message(self, message_id: str, agent_name: str) -> bool:
+        """Atomically claim a message for processing.
+
+        Returns True if the claim succeeded (this agent now owns the message).
+        Returns False if the message was already claimed or does not exist.
+        SQLite's single-writer guarantee makes this atomic under the shared lock.
+        """
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE messages SET claimed_by = ? WHERE id = ? AND claimed_by IS NULL",
+                (agent_name, message_id),
+            )
+            self._conn.commit()
+            return result.rowcount > 0
 
     def set_delivery_cursor(
         self,
