@@ -1,0 +1,41 @@
+[Unit]
+Description=claude-ct1 AgentBridge Bot (Claude API)
+After=network.target agentbridge.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=doceno
+WorkingDirectory=/Users/doceno/code/TheDarkFactory/AgentBridge
+
+# Load secrets from env file — create this on the server:
+#   echo "ANTHROPIC_API_KEY=sk-ant-..." >> /etc/agentbridge/bot.env
+#   echo "AGENTBRIDGE_TOKEN=..."       >> /etc/agentbridge/bot.env
+EnvironmentFile=-/etc/agentbridge/bot.env
+
+Environment=BOT_NAME=claude-ct1
+Environment=BOT_MODEL=claude-sonnet-4-6
+Environment=AGENTBRIDGE_URL=ws://172.31.141.155:7890
+Environment=AGENTBRIDGE_HTTP_URL=http://172.31.141.155:7890
+Environment=BOT_CONTEXT_MESSAGES=10
+
+ExecStart=/usr/bin/python3 /Users/doceno/code/TheDarkFactory/AgentBridge/bot.py
+Restart=always
+RestartSec=5
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=25%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=claude-ct1-bot
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
