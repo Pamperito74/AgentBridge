@@ -1,5 +1,5 @@
 [Unit]
-Description=claude-ct1 AgentBridge Bot (Claude API)
+Description=AgentBridge Bot (OpenAI-compatible LLM)
 After=network.target agentbridge.service
 StartLimitIntervalSec=120
 StartLimitBurst=5
@@ -9,13 +9,34 @@ Type=simple
 User=doceno
 WorkingDirectory=/Users/doceno/code/TheDarkFactory/AgentBridge
 
-# Load secrets from env file — create this on the server:
-#   echo "ANTHROPIC_API_KEY=sk-ant-..." >> /etc/agentbridge/bot.env
-#   echo "AGENTBRIDGE_TOKEN=..."       >> /etc/agentbridge/bot.env
+# Secrets — create this file on the server before enabling the service:
+#   sudo mkdir -p /etc/agentbridge
+#   sudo tee /etc/agentbridge/bot.env <<'EOF'
+#   AGENTBRIDGE_TOKEN=your-token-here
+#   LLM_API_KEY=your-key-if-needed
+#   EOF
 EnvironmentFile=-/etc/agentbridge/bot.env
 
+# Identity
 Environment=BOT_NAME=claude-ct1
-Environment=BOT_MODEL=claude-sonnet-4-6
+Environment=BOT_ROLE=AI coding agent — AgentBridge + CirrusTranslate
+Environment=BOT_CAPABILITIES=code-review,backend,typescript,python,agentbridge,nestjs,react
+
+# LLM — swap these to change provider with no code changes:
+#
+#   Ollama (local, no API key):
+Environment=LLM_BASE_URL=http://localhost:11434/v1
+Environment=LLM_MODEL=llama3.2
+#
+#   Groq (free tier, fast, no GPU):
+#Environment=LLM_BASE_URL=https://api.groq.com/openai/v1
+#Environment=LLM_MODEL=llama-3.3-70b-versatile
+#
+#   OpenAI:
+#Environment=LLM_BASE_URL=https://api.openai.com/v1
+#Environment=LLM_MODEL=gpt-4o
+
+# Bridge
 Environment=AGENTBRIDGE_URL=ws://172.31.141.155:7890
 Environment=AGENTBRIDGE_HTTP_URL=http://172.31.141.155:7890
 Environment=BOT_CONTEXT_MESSAGES=10
@@ -24,16 +45,13 @@ ExecStart=/usr/bin/python3 /Users/doceno/code/TheDarkFactory/AgentBridge/bot.py
 Restart=always
 RestartSec=5
 
-# Resource limits
 MemoryMax=256M
 CPUQuota=25%
 
-# Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=claude-ct1-bot
+SyslogIdentifier=agentbridge-bot
 
-# Security
 NoNewPrivileges=true
 PrivateTmp=true
 
