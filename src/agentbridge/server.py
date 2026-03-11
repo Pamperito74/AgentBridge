@@ -12,6 +12,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Literal
 import os
+import re
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -50,6 +51,35 @@ _sse_lock = threading.Lock()
 _auth_token = ""
 
 
+def _load_dotenv():
+    """Best-effort .env loader for AGENTBRIDGE_* variables.
+
+    This keeps behavior consistent when the server is started without a wrapper
+    that sources .env (e.g. direct `python -m agentbridge serve`).
+    """
+    env_path = os.environ.get("AGENTBRIDGE_DOTENV", ".env")
+    path = Path(env_path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if not path.exists():
+        return
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r'^export\s+(\w+)=["\']?([^"\']*)["\']?$', line) or \
+                re.match(r'^(\w+)=["\']?([^"\']*)["\']?$', line)
+            if not m:
+                continue
+            key, value = m.group(1), m.group(2)
+            # Do not override a real environment variable
+            if key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        return
+
+
 def _get_auth_token() -> str:
     """Read AGENTBRIDGE_TOKEN dynamically so the server picks it up even if
     the env var is set after process start. Falls back to the module-level
@@ -86,6 +116,7 @@ def _setup_logging() -> logging.Logger:
     return logger
 
 
+_load_dotenv()
 logger = _setup_logging()
 schema_registry = SchemaRegistry()
 
