@@ -1514,6 +1514,7 @@
     <div class="settings-tabs">
       <div class="settings-tab active" data-tab="general">General</div>
       <div class="settings-tab" id="users-tab-btn" data-tab="users" style="display:none">Users</div>
+      <div class="settings-tab" id="tools-tab-btn" data-tab="tools" style="display:none">Tools</div>
     </div>
     <div class="settings-body">
       <!-- General tab -->
@@ -1614,6 +1615,20 @@
             <button class="btn-primary" id="create-user-btn">Add User</button>
           </div>
           <div class="form-error" id="users-error"></div>
+        </div>
+      </div>
+      <!-- Tools tab (admin only) -->
+      <div id="settings-tab-tools" style="display:none">
+        <div class="settings-section">
+          <div class="settings-section-title">Maintenance</div>
+          <div class="settings-row">
+            <label>Stale agent threshold (sec)</label>
+            <input type="number" id="stale-agent-seconds" value="300" min="60" max="86400" style="width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px">
+          </div>
+          <div class="settings-row" style="align-items:center;gap:8px">
+            <button class="btn-primary" id="prune-agents-btn">Remove stale agents</button>
+            <span id="prune-agents-status" style="font-size:12px;min-height:16px"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -1901,6 +1916,7 @@ async function initAuth() {
     }
     if (currentUser?.role === 'admin') {
       document.getElementById('users-tab-btn').style.display = '';
+      document.getElementById('tools-tab-btn').style.display = '';
     }
     startApp();
   }
@@ -1969,6 +1985,7 @@ async function initAuth() {
     document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.getElementById('settings-tab-general').style.display = tab === 'general' ? '' : 'none';
     document.getElementById('settings-tab-users').style.display = tab === 'users' ? '' : 'none';
+    document.getElementById('settings-tab-tools').style.display = tab === 'tools' ? '' : 'none';
     if (tab === 'users') loadUsers();
   }
   document.getElementById('settings-close').addEventListener('click', closeSettings);
@@ -2109,6 +2126,37 @@ async function initAuth() {
       list.innerHTML = '<div style="color:var(--red);font-size:13px;padding:8px 0">Failed to load users</div>';
     }
   }
+
+  async function pruneAgents() {
+    const statusEl = document.getElementById('prune-agents-status');
+    const btn = document.getElementById('prune-agents-btn');
+    const input = document.getElementById('stale-agent-seconds');
+    const olderThan = Math.max(60, Math.min(86400, Number(input.value || 300)));
+    input.value = String(olderThan);
+    statusEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+    try {
+      const r = await fetch(API + '/admin/prune-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-AgentBridge-Token': TOKEN },
+        body: JSON.stringify({ older_than_sec: olderThan }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      statusEl.textContent = `✓ Removed ${d.count} agent(s)`;
+      setTimeout(() => { statusEl.textContent = ''; }, 4000);
+      // Refresh agents list if visible
+      api('/agents?active=1').then(a => { agents = a; renderAgents(); });
+    } catch (e) {
+      statusEl.textContent = 'Failed to prune agents';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Remove stale agents';
+    }
+  }
+
+  document.getElementById('prune-agents-btn').addEventListener('click', pruneAgents);
 
   document.getElementById('create-user-btn').addEventListener('click', async () => {
     const username = document.getElementById('new-username').value.trim();

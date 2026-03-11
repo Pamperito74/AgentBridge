@@ -290,6 +290,10 @@ class ClearBoardRequest(BaseModel):
     include_threads: bool = True
 
 
+class PruneAgentsRequest(BaseModel):
+    older_than_sec: int = Field(default=300, ge=60, le=86400)
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=1024)
@@ -539,6 +543,25 @@ async def http_clear_board(body: ClearBoardRequest | None = None):
     await get_store()._run_in_thread(get_store().clear_board, payload.include_threads)
     _broadcast_sse("system", {"type": "clear", "include_threads": payload.include_threads})
     return {"cleared": True, "include_threads": payload.include_threads}
+
+
+@http_app.post("/admin/prune-agents")
+async def http_prune_agents(request: Request, body: PruneAgentsRequest | None = None):
+    _assert_admin(request)
+    payload = body or PruneAgentsRequest()
+    now = datetime.now(timezone.utc)
+    cutoff = payload.older_than_sec
+    manager = get_ws_manager()
+    removed: list[str] = []
+    agents = await get_store().list_agents_async()
+    for a in agents:
+        if manager.is_connected(a.name):
+            continue
+        if (now - a.last_seen).total_seconds() > cutoff:
+            await get_store().remove_agent_async(a.name)
+            removed.append(a.name)
+            _broadcast_sse("agent_left", {"name": a.name})
+    return {"removed": removed, "count": len(removed), "older_than_sec": cutoff}
 
 
 @http_app.get("/cursors")
