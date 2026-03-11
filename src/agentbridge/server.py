@@ -20,7 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from .models import MESSAGE_TYPES, Message
+from .models import MESSAGE_TYPES, ContentBlock, Message
+from .rate_limit import get_rate_limiter
 from .schema_registry import SchemaRegistry, SchemaValidationError
 from .store import MessageStore
 from .ws_manager import get_ws_manager
@@ -128,6 +129,55 @@ logger = _setup_logging()
 schema_registry = SchemaRegistry()
 
 
+# ── Remote proxy mode ───────────────────────────────────────────────
+# When AGENTBRIDGE_REMOTE_URL is set, all MCP tools proxy to that HTTP server
+# instead of the local SQLite store. This lets Claude sessions appear in a
+# shared dashboard without running their own HTTP server.
+
+def _remote_url() -> str | None:
+    """Return remote AgentBridge base URL, or None if running in local mode."""
+    url = os.environ.get("AGENTBRIDGE_REMOTE_URL", "").strip().rstrip("/")
+    return url if url else None
+
+
+def _rhttp(method: str, path: str, body: dict | None = None, params: dict | None = None, timeout: float = 10.0) -> dict | list:
+    """Make an authenticated HTTP request to the remote AgentBridge server."""
+    import urllib.request
+    import urllib.error
+    from urllib.parse import urlencode
+
+    base = _remote_url()
+    if not base:
+        raise RuntimeError("AGENTBRIDGE_REMOTE_URL is not set")
+
+    url = base + path
+    if params:
+        qs = urlencode({k: v for k, v in params.items() if v is not None})
+        if qs:
+            url += "?" + qs
+
+    token = os.environ.get("AGENTBRIDGE_TOKEN", "")
+    headers: dict[str, str] = {}
+    if token:
+        headers["X-AgentBridge-Token"] = token
+
+    data: bytes | None = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode()
+
+    req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode()
+        raise RuntimeError(f"Remote {method.upper()} {path} → HTTP {e.code}: {body_text}")
+    except Exception as e:
+        raise RuntimeError(f"Remote {method.upper()} {path} failed: {e}")
+
+
 def _safe_put(queue: asyncio.Queue[str], payload: str):
     try:
         queue.put_nowait(payload)
@@ -197,7 +247,7 @@ async def lifespan(app: FastAPI):
             store = None
 
 
-http_app = FastAPI(title="AgentBridge", version="0.3.0", lifespan=lifespan)
+http_app = FastAPI(title="AgentBridge", version="0.5.0", lifespan=lifespan)
 
 
 @http_app.middleware("http")
@@ -252,6 +302,18 @@ class ArtifactRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class ContentBlockRequest(BaseModel):
+    type: str = Field(default="text", max_length=64)
+    content: str = Field(min_length=1, max_length=40000)
+    language: str | None = Field(default=None, max_length=64)
+    mime_type: str | None = Field(default=None, max_length=128)
+    title: str | None = Field(default=None, max_length=256)
+
+
+class MemorySetRequest(BaseModel):
+    value: str = Field(min_length=0, max_length=100000)
+
+
 class SendMessageRequest(BaseModel):
     sender: str = Field(min_length=1, max_length=128)
     content: str = Field(min_length=1, max_length=10000)
@@ -259,6 +321,7 @@ class SendMessageRequest(BaseModel):
     thread: str = Field(default="general", min_length=1, max_length=128)
     msg_type: Literal["chat", "request", "response", "status", "alert"] = "chat"
     artifacts: list[ArtifactRequest] | None = None
+    blocks: list[ContentBlockRequest] | None = None
     correlation_id: str | None = None
 
 
@@ -482,7 +545,10 @@ async def http_respond_to_agent_request(name: str, request_id: str, body: AgentR
 # --- Messages ---
 
 @http_app.post("/messages")
-async def http_send_message(body: SendMessageRequest):
+async def http_send_message(request: Request, body: SendMessageRequest):
+    # Rate limit: 30 msg/s per sender, burst 60
+    if not get_rate_limiter().acquire(f"send:{body.sender}", rate=30.0, burst=60.0):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — slow down")
     correlation_id = body.correlation_id
     if body.msg_type == "request" and not correlation_id:
         correlation_id = str(uuid.uuid4())
@@ -493,6 +559,7 @@ async def http_send_message(body: SendMessageRequest):
         thread=body.thread,
         msg_type=body.msg_type,
         artifacts=[a.model_dump() for a in body.artifacts] if body.artifacts else None,
+        blocks=[b.model_dump() for b in body.blocks] if body.blocks else None,
         correlation_id=correlation_id,
     )
     result = msg.model_dump(mode="json")
@@ -573,7 +640,10 @@ async def http_claim_message(message_id: str, body: ClaimRequest):
 
 
 @http_app.post("/bus/events")
-async def http_send_event(body: EventWriteRequest):
+async def http_send_event(request: Request, body: EventWriteRequest):
+    # Rate limit: 100 events/s per actor, burst 200
+    if not get_rate_limiter().acquire(f"event:{body.actor_id}", rate=100.0, burst=200.0):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — slow down")
     try:
         schema_registry.validate(body.event_type, body.metadata)
     except SchemaValidationError as e:
@@ -666,6 +736,37 @@ async def http_set_cursor(body: CursorRequest):
         timestamp,
     )
     return {"ok": True}
+
+
+# --- Agent Memory ---
+
+@http_app.put("/agents/{name}/memory/{key}", status_code=200)
+async def http_memory_set(name: str, key: str, body: MemorySetRequest):
+    """Upsert a persistent memory entry for an agent (key-value store)."""
+    result = await get_store().memory_set_async(name, key, body.value)
+    return result
+
+
+@http_app.get("/agents/{name}/memory/{key}")
+async def http_memory_get(name: str, key: str):
+    entry = await get_store().memory_get_async(name, key)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Memory key not found")
+    return entry
+
+
+@http_app.get("/agents/{name}/memory")
+async def http_memory_list(name: str, q: str | None = Query(None)):
+    if q:
+        return await get_store().memory_search_async(name, q)
+    return await get_store().memory_list_async(name)
+
+
+@http_app.delete("/agents/{name}/memory/{key}", status_code=204)
+async def http_memory_delete(name: str, key: str):
+    deleted = await get_store().memory_delete_async(name, key)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory key not found")
 
 
 @http_app.get("/bus/schemas")
@@ -817,7 +918,7 @@ async def health():
         auth_mode = "token"
     else:
         auth_mode = "open"
-    return {"status": "ok", "version": "0.4.0", "auth": auth_mode}
+    return {"status": "ok", "version": "0.5.0", "auth": auth_mode}
 
 
 # ── Auth endpoints ────────────────────────────────────────────────────
@@ -1036,6 +1137,36 @@ async def websocket_endpoint(websocket: WebSocket):
                     except ValueError:
                         pass
 
+            elif msg_type in ("stream_start", "stream_chunk", "stream_end"):
+                # Streaming events: broadcast to other connected agents, broadcast SSE
+                stream_payload = {
+                    "type": msg_type,
+                    "sender": agent_name,
+                    "stream_id": message.get("stream_id", ""),
+                    "thread": message.get("thread", "general"),
+                    "content": message.get("content", ""),
+                    "recipient": message.get("recipient"),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                _broadcast_sse(msg_type, stream_payload)
+                await manager.broadcast(
+                    stream_payload,
+                    exclude=agent_name,
+                    thread=stream_payload["thread"],
+                    event_type=msg_type,
+                )
+                if msg_type == "stream_end":
+                    # Persist the completed stream as a regular message
+                    stored = get_store().add_message(
+                        sender=agent_name,
+                        content=message.get("content", ""),
+                        recipient=message.get("recipient"),
+                        thread=message.get("thread", "general"),
+                        msg_type="chat",
+                        metadata={"stream_id": message.get("stream_id", ""), "streamed": True},
+                    )
+                    _broadcast_sse("message", stored.model_dump(mode="json"))
+
             elif msg_type == "heartbeat":
                 get_store().heartbeat(
                     agent_name,
@@ -1075,6 +1206,11 @@ mcp = FastMCP(
 def register(name: str, role: str = "", capabilities: list[str] | None = None) -> str:
     """Register this agent. Call first with a unique name, optional role, and optional
     capabilities list (e.g. ['code-review', 'testing', 'deployment'])."""
+    if _remote_url():
+        caps = capabilities or []
+        _rhttp("POST", "/agents", {"name": name, "role": role, "capabilities": caps, "agent_type": "bot"})
+        cap_str = f" capabilities=[{', '.join(caps)}]" if caps else ""
+        return f"Registered as '{name}'" + (f" ({role})" if role else "") + cap_str
     existing = get_store().get_agent(name)
     agent = get_store().register_agent(name, role, capabilities)
     _broadcast_sse("agent_joined", agent.model_dump(mode="json"))
@@ -1096,6 +1232,15 @@ def send(
     use request_agent() instead. msg_type: chat, request, status, alert."""
     if msg_type not in MESSAGE_TYPES:
         raise ValueError(f"Invalid msg_type '{msg_type}'. Valid: {', '.join(MESSAGE_TYPES)}")
+    if _remote_url():
+        body: dict = {"sender": sender, "content": content, "thread": thread, "msg_type": msg_type}
+        if recipient:
+            body["recipient"] = recipient
+        if artifacts:
+            body["artifacts"] = artifacts
+        msg_d = _rhttp("POST", "/messages", body)
+        target = f" → {msg_d.get('recipient')}" if msg_d.get("recipient") else " (broadcast)"
+        return f"[{msg_type}] Sent to [{thread}]{target}: {content}"
     msg = get_store().add_message(
         sender=sender, content=content, recipient=recipient,
         thread=thread, msg_type=msg_type, artifacts=artifacts,
@@ -1131,6 +1276,29 @@ def request_agent(
 
     Returns the recipient's response content, or raises TimeoutError.
     """
+    if _remote_url():
+        correlation_id = str(uuid.uuid4())
+        # POST the request as a message on the remote server
+        msg_d = _rhttp("POST", "/messages", {
+            "sender": sender, "recipient": recipient, "content": content,
+            "thread": thread, "msg_type": "request", "correlation_id": correlation_id,
+        })
+        since_id = msg_d.get("id")
+        # Poll for a response message with the same correlation_id
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            params: dict = {"as_agent": sender, "limit": 50}
+            if since_id:
+                params["since_id"] = since_id
+            msgs = _rhttp("GET", "/messages", params=params)
+            for m in (msgs if isinstance(msgs, list) else []):
+                if m.get("msg_type") == "response" and m.get("correlation_id") == correlation_id:
+                    return m["content"]
+            time.sleep(0.5)
+        raise TimeoutError(
+            f"No response from '{recipient}' within {timeout_sec}s "
+            f"(correlation_id={correlation_id})"
+        )
     correlation_id = str(uuid.uuid4())
 
     # 1. Create persistent queue entry (transport-agnostic)
@@ -1225,6 +1393,24 @@ def wait_for_request(agent_name: str, timeout_sec: float = 30.0) -> str:
     Use the correlation_id with respond() to reply.
     Returns a timeout status dict if nothing arrives within timeout_sec.
     """
+    if _remote_url():
+        deadline = time.monotonic() + timeout_sec
+        seen: set[str] = set()
+        while time.monotonic() < deadline:
+            msgs = _rhttp("GET", "/messages", params={"as_agent": agent_name, "limit": 50})
+            for m in (msgs if isinstance(msgs, list) else []):
+                if m.get("msg_type") == "request" and m.get("correlation_id") and m["id"] not in seen:
+                    seen.add(m["id"])
+                    return json.dumps({
+                        "correlation_id": m["correlation_id"],
+                        "sender": m["sender"],
+                        "content": m["content"],
+                        "thread": m.get("thread", "general"),
+                        "timestamp": m.get("timestamp"),
+                    })
+            time.sleep(0.5)
+        return json.dumps({"status": "timeout", "message": f"No requests within {timeout_sec}s"})
+
     start_ts = datetime.now(timezone.utc).isoformat()
 
     # 0. Check agent_requests queue first (persistent, transport-agnostic)
@@ -1323,6 +1509,21 @@ def respond(
     The agent that called request_agent() will unblock and receive this content.
     status: 'success' or 'error'.
     """
+    if _remote_url():
+        # Find the original request to get the requester name
+        msgs = _rhttp("GET", "/messages", params={"limit": 50})
+        original = next(
+            (m for m in (msgs if isinstance(msgs, list) else [])
+             if m.get("correlation_id") == correlation_id and m.get("msg_type") == "request"),
+            None,
+        )
+        requester = original["sender"] if original else None
+        thread = original.get("thread", "general") if original else "general"
+        _rhttp("POST", "/messages", {
+            "sender": agent_name, "recipient": requester, "content": content,
+            "thread": thread, "msg_type": "response", "correlation_id": correlation_id,
+        })
+        return f"Response sent (correlation_id={correlation_id}, to={requester or 'unknown'})"
     # Look up the original request to route the response back
     originals = get_store().read_messages(correlation_id=correlation_id, limit=10)
     original = next((m for m in originals if m.msg_type == "request"), None)
@@ -1369,6 +1570,12 @@ def kick_agent(name: str) -> str:
 
     Use when an agent is stale, misbehaving, or needs to be restarted.
     """
+    if _remote_url():
+        try:
+            _rhttp("DELETE", f"/agents/{name}")
+        except Exception:
+            pass
+        return f"Agent '{name}' kicked and removed from registry."
     manager = get_ws_manager()
     if _uvicorn_loop and _uvicorn_loop.is_running() and manager.is_connected(name):
         try:
@@ -1390,6 +1597,20 @@ def find_agent(capability: str) -> str:
     Returns a list of agent names and roles that can handle the capability.
     Example: find_agent('code-review') → agents that registered with that capability.
     """
+    if _remote_url():
+        all_agents = _rhttp("GET", "/agents")
+        cap_lower = capability.lower()
+        matches_d = [
+            a for a in (all_agents if isinstance(all_agents, list) else [])
+            if cap_lower in a.get("role", "").lower()
+            or any(cap_lower in c.lower() for c in a.get("capabilities", []))
+        ]
+        if not matches_d:
+            return f"No agents found with capability '{capability}'."
+        return "\n".join(
+            f"  {a['name']}" + (f" ({a['role']})" if a.get("role") else "") + f" [{a.get('status', '?')}]"
+            for a in matches_d
+        )
     matches = get_store().find_agents_by_capability(capability)
     if not matches:
         return f"No agents found with capability '{capability}'."
@@ -1420,6 +1641,32 @@ def read(
     - since_id: only return messages after this ID.
     - cursor_agent/cursor_thread + save_cursor: persist the last message ID for the given agent/thread so you can resume later.
     """
+    if _remote_url():
+        params: dict = {"limit": limit}
+        if thread:
+            params["thread"] = thread
+        if sender:
+            params["sender"] = sender
+        if as_agent:
+            params["as_agent"] = as_agent
+        if since_id:
+            params["since_id"] = since_id
+        msgs = _rhttp("GET", "/messages", params=params)
+        if not msgs:
+            return "No messages."
+        lines = []
+        for m in (msgs if isinstance(msgs, list) else []):
+            prefix = f"[{m['thread']}] " if m.get("thread") and m["thread"] != "general" else ""
+            to = f" → {m['recipient']}" if m.get("recipient") else ""
+            type_tag = f"[{m['msg_type']}] " if m.get("msg_type") and m["msg_type"] != "chat" else ""
+            artifacts_val = m.get("artifacts") or []
+            artifact_tag = f" [{len(artifacts_val)} artifacts]" if artifacts_val else ""
+            corr_tag = f" (cid={m['correlation_id'][:8]})" if m.get("correlation_id") else ""
+            lines.append(f"{type_tag}{prefix}{m['sender']}{to}: {m['content']}{artifact_tag}{corr_tag}")
+        if save_cursor and cursor_agent and lines:
+            last = (msgs if isinstance(msgs, list) else [])[-1]
+            _rhttp("POST", "/cursors", {"agent": cursor_agent, "thread": cursor_thread or thread or "general", "last_message_id": last["id"], "timestamp": last.get("timestamp")})
+        return "\n".join(lines)
     messages = get_store().read_messages(
         thread=thread,
         sender=sender,
@@ -1450,6 +1697,15 @@ def read(
 @mcp.tool()
 def list_cursors(agent: str | None = None) -> str:
     """List persisted delivery cursors."""
+    if _remote_url():
+        params = {"agent": agent} if agent else {}
+        cursors = _rhttp("GET", "/cursors", params=params)
+        if not cursors:
+            return "No cursors recorded."
+        return "\n".join(
+            f"{c['agent_name']}#{c['thread']}: last={c.get('last_message_id') or '<none>'} @ {c.get('last_timestamp') or 'unknown'}"
+            for c in (cursors if isinstance(cursors, list) else [])
+        )
     cursors = get_store().list_delivery_cursors(agent)
     if not cursors:
         return "No cursors recorded."
@@ -1462,6 +1718,12 @@ def list_cursors(agent: str | None = None) -> str:
 @mcp.tool()
 def get_cursor(agent: str, thread: str = "general") -> str:
     """Get a single delivery cursor for an agent/thread."""
+    if _remote_url():
+        cursors = _rhttp("GET", "/cursors", params={"agent": agent})
+        cursor = next((c for c in (cursors if isinstance(cursors, list) else []) if c.get("thread") == thread), None)
+        if not cursor:
+            return f"No cursor for {agent}#{thread}"
+        return f"{agent}#{thread}: {cursor.get('last_message_id')} @ {cursor.get('last_timestamp')} (updated {cursor.get('updated_at')})"
     cursor = get_store().get_delivery_cursor(agent, thread)
     if not cursor:
         return f"No cursor for {agent}#{thread}"
@@ -1471,6 +1733,9 @@ def get_cursor(agent: str, thread: str = "general") -> str:
 @mcp.tool()
 def set_cursor(agent: str, thread: str, last_message_id: str, timestamp: str | None = None) -> str:
     """Persist a delivery cursor."""
+    if _remote_url():
+        _rhttp("POST", "/cursors", {"agent": agent, "thread": thread, "last_message_id": last_message_id, "timestamp": timestamp})
+        return f"Cursor set for {agent}#{thread} -> {last_message_id}"
     ts = timestamp or get_store().message_timestamp(last_message_id)
     if not ts:
         raise ValueError("message_id not found")
@@ -1481,6 +1746,22 @@ def set_cursor(agent: str, thread: str, last_message_id: str, timestamp: str | N
 @mcp.tool()
 def agents() -> str:
     """List all connected agents with their capabilities."""
+    if _remote_url():
+        agent_list = _rhttp("GET", "/agents")
+        if not agent_list:
+            return "No agents connected."
+        lines = []
+        for a in (agent_list if isinstance(agent_list, list) else []):
+            parts = [f"  {a['name']}"]
+            if a.get("role"):
+                parts.append(f"({a['role']})")
+            parts.append(f"[{a.get('status', '?')}]")
+            if a.get("working_on"):
+                parts.append(f"— {a['working_on']}")
+            if a.get("capabilities"):
+                parts.append(f"caps=[{', '.join(a['capabilities'])}]")
+            lines.append(" ".join(parts))
+        return "\n".join(lines)
     agent_list = get_store().list_agents()
     if not agent_list:
         return "No agents connected."
@@ -1503,6 +1784,9 @@ def heartbeat(name: str, status: str = "online", working_on: str = "") -> str:
     """Update agent status. status: online|busy|idle."""
     if status not in {"online", "busy", "idle"}:
         raise ValueError("status must be one of: online, busy, idle")
+    if _remote_url():
+        a = _rhttp("POST", f"/agents/{name}/heartbeat", {"status": status, "working_on": working_on})
+        return f"{a.get('name', name)} [{a.get('status', status)}]" + (f" — {a['working_on']}" if a.get("working_on") else "")
     agent = get_store().heartbeat(name, status=status, working_on=working_on)
     if not agent:
         return f"Agent '{name}' not found. Register first."
@@ -1513,6 +1797,11 @@ def heartbeat(name: str, status: str = "online", working_on: str = "") -> str:
 @mcp.tool()
 def threads() -> str:
     """List active threads."""
+    if _remote_url():
+        thread_list = _rhttp("GET", "/threads")
+        if not thread_list:
+            return "No threads."
+        return "\n".join(f"  #{t['name']} (by {t.get('created_by', '?')})" for t in (thread_list if isinstance(thread_list, list) else []))
     thread_list = get_store().list_threads()
     if not thread_list:
         return "No threads."
@@ -1522,6 +1811,9 @@ def threads() -> str:
 @mcp.tool()
 def create_thread(name: str, created_by: str) -> str:
     """Create a named discussion thread."""
+    if _remote_url():
+        t = _rhttp("POST", "/threads", {"name": name, "created_by": created_by})
+        return f"Created thread: #{t.get('name', name)}"
     t = get_store().create_thread(name, created_by)
     _broadcast_sse("thread_created", t.model_dump(mode="json"))
     return f"Created thread: #{t.name}"
@@ -1530,6 +1822,18 @@ def create_thread(name: str, created_by: str) -> str:
 @mcp.tool()
 def thread_summary(name: str) -> str:
     """Get a summary of a thread: message count, participants, last activity."""
+    if _remote_url():
+        s = _rhttp("GET", f"/threads/{name}/summary")
+        if s.get("message_count", 0) == 0:
+            return f"Thread '{name}': no messages."
+        participants = s.get("participants", [])
+        last = s.get("last_message_at", "?")[:16] if s.get("last_message_at") else "?"
+        return (
+            f"#{s.get('name', name)}: {s['message_count']} messages, "
+            f"{len(participants)} participants ({', '.join(participants)}), "
+            f"last activity {last}\n"
+            f"Last: {s.get('last_message_preview', '')}"
+        )
     s = get_store().thread_summary(name)
     if s.message_count == 0:
         return f"Thread '{name}': no messages."
@@ -1540,6 +1844,85 @@ def thread_summary(name: str) -> str:
         f"last activity {last}\n"
         f"Last: {s.last_message_preview}"
     )
+
+
+# ── MCP Memory Tools ────────────────────────────────────────────────
+
+@mcp.tool()
+def memory_set(agent_name: str, key: str, value: str) -> str:
+    """Persist a key-value memory entry for this agent.
+
+    Use to store facts, preferences, or context that should survive across
+    conversation turns. Values are plain text (stringify JSON if needed).
+    Example: memory_set('claude-ct1', 'preferred_language', 'TypeScript')
+    """
+    if _remote_url():
+        _rhttp("PUT", f"/agents/{agent_name}/memory/{key}", {"value": value})
+        return f"Memory set: {agent_name}[{key}]"
+    get_store().memory_set(agent_name, key, value)
+    return f"Memory set: {agent_name}[{key}]"
+
+
+@mcp.tool()
+def memory_get(agent_name: str, key: str) -> str:
+    """Retrieve a stored memory entry for this agent.
+
+    Returns the value string, or 'Key not found' if it doesn't exist.
+    """
+    if _remote_url():
+        try:
+            entry = _rhttp("GET", f"/agents/{agent_name}/memory/{key}")
+            return str(entry.get("value", "")) if isinstance(entry, dict) else "Key not found"
+        except Exception:
+            return "Key not found"
+    entry = get_store().memory_get(agent_name, key)
+    if not entry:
+        return "Key not found"
+    return entry["value"]
+
+
+@mcp.tool()
+def memory_list(agent_name: str, search: str | None = None) -> str:
+    """List all memory entries for this agent, optionally filtered by search query.
+
+    Returns key=value pairs, one per line.
+    """
+    if _remote_url():
+        params: dict = {}
+        if search:
+            params["q"] = search
+        entries = _rhttp("GET", f"/agents/{agent_name}/memory", params=params or None)
+        if not entries:
+            return "No memory entries."
+        return "\n".join(
+            f"  {e['key']} = {e['value'][:80]}{'…' if len(e.get('value','')) > 80 else ''}"
+            for e in (entries if isinstance(entries, list) else [])
+        )
+    if search:
+        entries = get_store().memory_search(agent_name, search)
+    else:
+        entries = get_store().memory_list(agent_name)
+    if not entries:
+        return "No memory entries."
+    return "\n".join(
+        f"  {e['key']} = {e['value'][:80]}{'…' if len(e['value']) > 80 else ''}"
+        for e in entries
+    )
+
+
+@mcp.tool()
+def memory_delete(agent_name: str, key: str) -> str:
+    """Delete a stored memory entry for this agent."""
+    if _remote_url():
+        try:
+            _rhttp("DELETE", f"/agents/{agent_name}/memory/{key}")
+        except Exception:
+            return f"Key '{key}' not found for agent '{agent_name}'"
+        return f"Deleted: {agent_name}[{key}]"
+    deleted = get_store().memory_delete(agent_name, key)
+    if not deleted:
+        return f"Key '{key}' not found for agent '{agent_name}'"
+    return f"Deleted: {agent_name}[{key}]"
 
 
 # ── Entry point ─────────────────────────────────────────────────────

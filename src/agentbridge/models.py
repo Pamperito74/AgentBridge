@@ -4,7 +4,7 @@ import uuid
 import re
 
 # Valid message types
-MESSAGE_TYPES = ("chat", "request", "response", "status", "alert")
+MESSAGE_TYPES = ("chat", "request", "response", "status", "alert", "stream_start", "stream_chunk", "stream_end")
 
 # @mention pattern
 MENTION_RE = re.compile(r"@([\w-]+)")
@@ -19,6 +19,15 @@ class Agent(BaseModel):
     agent_type: str = "bot"  # 'bot' | 'human'
     connected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ContentBlock(BaseModel):
+    """Structured content block — richer alternative to plain text content."""
+    type: str  # text | code | image | file | url
+    content: str
+    language: str | None = None   # for type=code (e.g. "python", "typescript")
+    mime_type: str | None = None  # for type=image|file
+    title: str | None = None      # optional display title
 
 
 class Artifact(BaseModel):
@@ -44,6 +53,8 @@ class Message(BaseModel):
     msg_type: str = "chat"
     mentions: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    # Structured content blocks (v2, optional — content still required for backward compat)
+    blocks: list[ContentBlock] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # Request-response correlation
     correlation_id: str | None = None  # UUID linking request to response
