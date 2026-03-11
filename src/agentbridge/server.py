@@ -84,7 +84,7 @@ def _safe_put(queue: asyncio.Queue[str], payload: str):
     try:
         queue.put_nowait(payload)
     except asyncio.QueueFull:
-        return
+        logger.warning("SSE subscriber queue full — event dropped (consider reducing broadcast rate or increasing maxsize)")
 
 
 def _broadcast_sse(event: str, data: dict):
@@ -98,7 +98,7 @@ def _broadcast_sse(event: str, data: dict):
 
 
 def _try_ws_deliver(recipient: str, message: dict):
-    """Best-effort real-time delivery to a WS-connected agent (non-blocking).
+    """Best-effort real-time delivery to a WS-connected agent (fire-and-forget).
 
     Called from sync HTTP handlers. Uses the captured uvicorn loop.
     Silently skips if the recipient isn't WS-connected.
@@ -108,27 +108,30 @@ def _try_ws_deliver(recipient: str, message: dict):
     manager = get_ws_manager()
     if not manager.is_connected(recipient):
         return
-    try:
-        asyncio.run_coroutine_threadsafe(
-            manager.send_to_agent(recipient, message),
-            _uvicorn_loop,
-        ).result(timeout=2)
-    except Exception:
-        pass  # WS delivery is best-effort; store already persisted
+    asyncio.run_coroutine_threadsafe(
+        manager.send_to_agent(recipient, message),
+        _uvicorn_loop,
+    )
 
 
 def _try_ws_broadcast(message: dict, exclude: str | None = None):
-    """Best-effort broadcast to all WS-connected agents (non-blocking)."""
+    """Best-effort broadcast to all WS-connected agents (fire-and-forget)."""
     if _uvicorn_loop is None or not _uvicorn_loop.is_running():
         return
-    manager = get_ws_manager()
-    try:
-        asyncio.run_coroutine_threadsafe(
-            manager.broadcast(message, exclude=exclude),
-            _uvicorn_loop,
-        ).result(timeout=2)
-    except Exception:
-        pass
+    asyncio.run_coroutine_threadsafe(
+        get_ws_manager().broadcast(message, exclude=exclude),
+        _uvicorn_loop,
+    )
+
+
+def _notify_incoming_waiter(recipient: str, message_data: dict):
+    """Notify any wait_for_request() waiter registered for recipient (fire-and-forget)."""
+    if _uvicorn_loop is None or not _uvicorn_loop.is_running():
+        return
+    asyncio.run_coroutine_threadsafe(
+        get_ws_manager().notify_incoming_request(recipient, message_data),
+        _uvicorn_loop,
+    )
 
 
 # ── HTTP API (FastAPI) ──────────────────────────────────────────────
@@ -267,8 +270,12 @@ class ClaimRequest(BaseModel):
 
 @http_app.post("/agents")
 async def http_register_agent(body: RegisterAgentRequest):
+    existing = await get_store().get_agent_async(body.name)
     agent = await get_store().register_agent_async(body.name, body.role, body.capabilities, agent_type=body.agent_type)
     result = agent.model_dump(mode="json")
+    if existing:
+        result["warning"] = f"Agent '{body.name}' was already registered — previous instance evicted"
+        logger.warning(f"Agent name collision: '{body.name}' re-registered, evicting previous instance")
     _broadcast_sse("agent_joined", result)
     return result
 
@@ -345,6 +352,10 @@ async def http_send_message(body: SendMessageRequest):
     )
     result = msg.model_dump(mode="json")
     _broadcast_sse("message", result)
+
+    # Notify any wait_for_request() waiter immediately
+    if msg.msg_type == "request" and msg.recipient:
+        await get_ws_manager().notify_incoming_request(msg.recipient, result)
 
     # Real-time WS delivery to agents
     if body.msg_type == "request":
@@ -876,10 +887,15 @@ mcp = FastMCP(
 def register(name: str, role: str = "", capabilities: list[str] | None = None) -> str:
     """Register this agent. Call first with a unique name, optional role, and optional
     capabilities list (e.g. ['code-review', 'testing', 'deployment'])."""
+    existing = get_store().get_agent(name)
     agent = get_store().register_agent(name, role, capabilities)
     _broadcast_sse("agent_joined", agent.model_dump(mode="json"))
     cap_str = f" capabilities=[{', '.join(agent.capabilities)}]" if agent.capabilities else ""
-    return f"Registered as '{agent.name}'" + (f" ({agent.role})" if agent.role else "") + cap_str
+    result = f"Registered as '{agent.name}'" + (f" ({agent.role})" if agent.role else "") + cap_str
+    if existing:
+        logger.warning(f"Agent name collision: '{name}' re-registered, evicting previous instance")
+        result += f"\nWARNING: Agent '{name}' was already registered — previous instance evicted. Use a unique name if running multiple instances."
+    return result
 
 
 @mcp.tool()
@@ -897,6 +913,9 @@ def send(
         thread=thread, msg_type=msg_type, artifacts=artifacts,
     )
     _broadcast_sse("message", msg.model_dump(mode="json"))
+    # Notify any wait_for_request() waiter for the recipient
+    if msg_type == "request" and recipient:
+        _notify_incoming_waiter(recipient, msg.model_dump(mode="json"))
     # Real-time WS delivery
     if recipient:
         _try_ws_deliver(recipient, {"type": "message", **msg.model_dump(mode="json")})
@@ -933,28 +952,54 @@ def request_agent(
     )
     _broadcast_sse("message", msg.model_dump(mode="json"))
 
-    # Best-effort real-time delivery via WS
-    _try_ws_deliver(recipient, {
-        "type": "request",
-        "correlation_id": correlation_id,
-        "sender": sender,
-        "content": content,
-        "thread": thread,
-    })
+    # Notify any wait_for_request() waiter immediately
+    _notify_incoming_waiter(recipient, msg.model_dump(mode="json"))
 
-    # Poll DB for response with this correlation_id
-    deadline = time.monotonic() + timeout_sec
-    while time.monotonic() < deadline:
-        responses = get_store().read_messages(correlation_id=correlation_id, limit=10)
-        response = next((m for m in responses if m.msg_type == "response"), None)
-        if response:
-            return response.content
-        time.sleep(0.4)
-
-    raise TimeoutError(
-        f"No response from '{recipient}' within {timeout_sec}s "
-        f"(correlation_id={correlation_id})"
-    )
+    manager = get_ws_manager()
+    if _uvicorn_loop and _uvicorn_loop.is_running() and manager.is_connected(recipient):
+        # Fast path: runs entirely in the uvicorn loop — resolves instantly on response
+        try:
+            result = asyncio.run_coroutine_threadsafe(
+                manager.deliver_and_wait(
+                    recipient,
+                    {
+                        "type": "request",
+                        "correlation_id": correlation_id,
+                        "sender": sender,
+                        "content": content,
+                        "thread": thread,
+                    },
+                    correlation_id,
+                    timeout_sec,
+                ),
+                _uvicorn_loop,
+            ).result(timeout=timeout_sec + 2)
+            return result["content"]
+        except TimeoutError:
+            raise TimeoutError(
+                f"No response from '{recipient}' within {timeout_sec}s "
+                f"(correlation_id={correlation_id})"
+            )
+    else:
+        # Slow path: recipient not WS-connected, fall back to DB polling
+        _try_ws_deliver(recipient, {
+            "type": "request",
+            "correlation_id": correlation_id,
+            "sender": sender,
+            "content": content,
+            "thread": thread,
+        })
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            responses = get_store().read_messages(correlation_id=correlation_id, limit=10)
+            response = next((m for m in responses if m.msg_type == "response"), None)
+            if response:
+                return response.content
+            time.sleep(0.4)
+        raise TimeoutError(
+            f"No response from '{recipient}' within {timeout_sec}s "
+            f"(correlation_id={correlation_id})"
+        )
 
 
 @mcp.tool()
@@ -966,19 +1011,71 @@ def wait_for_request(agent_name: str, timeout_sec: float = 30.0) -> str:
     Returns a timeout status dict if nothing arrives within timeout_sec.
     """
     start_ts = datetime.now(timezone.utc).isoformat()
-    deadline = time.monotonic() + timeout_sec
 
+    def _make_result(m) -> str:
+        return json.dumps({
+            "correlation_id": m.correlation_id,
+            "sender": m.sender,
+            "content": m.content,
+            "thread": m.thread,
+            "timestamp": m.timestamp.isoformat(),
+        })
+
+    def _make_result_from_dict(d: dict) -> str:
+        return json.dumps({
+            "correlation_id": d.get("correlation_id"),
+            "sender": d.get("sender"),
+            "content": d.get("content"),
+            "thread": d.get("thread"),
+            "timestamp": d.get("timestamp"),
+        })
+
+    # 1. Check DB for requests that already arrived before we were called
+    msgs = get_store().read_messages(as_agent=agent_name, since=start_ts, limit=20)
+    for m in msgs:
+        if m.msg_type == "request" and m.correlation_id:
+            return _make_result(m)
+
+    # 2. Event-based wait — resolves instantly when a request arrives
+    if _uvicorn_loop and _uvicorn_loop.is_running():
+        manager = get_ws_manager()
+        try:
+            pending = asyncio.run_coroutine_threadsafe(
+                manager.register_incoming_waiter(agent_name, timeout_sec),
+                _uvicorn_loop,
+            ).result(timeout=2)
+        except Exception:
+            pending = None
+
+        if pending is not None:
+            # 3. Re-check DB to close the race window between step 1 and waiter registration
+            msgs = get_store().read_messages(as_agent=agent_name, since=start_ts, limit=20)
+            for m in msgs:
+                if m.msg_type == "request" and m.correlation_id:
+                    asyncio.run_coroutine_threadsafe(
+                        manager.clear_incoming_waiter(agent_name), _uvicorn_loop
+                    )
+                    return _make_result(m)
+
+            try:
+                result = asyncio.run_coroutine_threadsafe(
+                    pending.wait(), _uvicorn_loop
+                ).result(timeout=timeout_sec + 2)
+                return _make_result_from_dict(result)
+            except (TimeoutError, Exception):
+                pass
+            finally:
+                asyncio.run_coroutine_threadsafe(
+                    manager.clear_incoming_waiter(agent_name), _uvicorn_loop
+                )
+
+    # Fallback: DB polling (uvicorn loop unavailable)
+    deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
         msgs = get_store().read_messages(as_agent=agent_name, since=start_ts, limit=20)
         for m in msgs:
             if m.msg_type == "request" and m.correlation_id:
-                return json.dumps({
-                    "correlation_id": m.correlation_id,
-                    "sender": m.sender,
-                    "content": m.content,
-                    "thread": m.thread,
-                    "timestamp": m.timestamp.isoformat(),
-                })
+                return _make_result(m)
         time.sleep(0.4)
 
     return json.dumps({"status": "timeout", "message": f"No requests within {timeout_sec}s"})
@@ -1218,7 +1315,9 @@ def thread_summary(name: str) -> str:
 # ── Entry point ─────────────────────────────────────────────────────
 
 def _run_http_server():
-    uvicorn.run(http_app, host="0.0.0.0", port=7890, log_level="warning")
+    host = os.environ.get("AGENTBRIDGE_HOST", "127.0.0.1")
+    port = int(os.environ.get("AGENTBRIDGE_PORT", "7890"))
+    uvicorn.run(http_app, host=host, port=port, log_level="warning")
 
 
 def main():

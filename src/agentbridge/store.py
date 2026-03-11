@@ -275,6 +275,26 @@ class MessageStore:
 
     # --- Agents ---
 
+    def get_agent(self, name: str) -> Agent | None:
+        """Look up a single agent by name. Returns None if not found."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT name, role, status, working_on, capabilities, connected_at, last_seen FROM agents WHERE name = ?",
+                (name,)
+            ).fetchone()
+        if not row:
+            return None
+        return Agent(
+            name=row[0], role=row[1] or "", status=row[2] or "online",
+            working_on=row[3] or "",
+            capabilities=json.loads(row[4]) if row[4] else [],
+            connected_at=datetime.fromisoformat(row[5]),
+            last_seen=datetime.fromisoformat(row[6]),
+        )
+
+    async def get_agent_async(self, name: str) -> Agent | None:
+        return await self._run_in_thread(self.get_agent, name)
+
     def register_agent(self, name: str, role: str = "", capabilities: list[str] | None = None, agent_type: str = "bot") -> Agent:
         now = datetime.now(timezone.utc)
         caps = capabilities or []

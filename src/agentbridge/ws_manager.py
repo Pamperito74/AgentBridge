@@ -62,6 +62,9 @@ class WebSocketConnectionManager:
         # Request ID -> PendingRequest
         self.pending_requests: dict[str, PendingRequest] = {}
         self.lock = asyncio.Lock()
+        # Per-agent waiters for incoming requests (used by wait_for_request MCP tool)
+        self.incoming_waiters: dict[str, PendingRequest] = {}
+        self.incoming_lock = asyncio.Lock()
 
     async def register_connection(self, agent_name: str, ws) -> "WebSocketConnection":
         async with self.lock:
@@ -132,6 +135,56 @@ class WebSocketConnectionManager:
             pending.resolve(response)
         else:
             logger.warning(f"Received response for unknown/expired request: {correlation_id}")
+
+    async def deliver_and_wait(
+        self,
+        recipient: str,
+        message: dict,
+        correlation_id: str,
+        timeout_sec: float,
+    ) -> dict:
+        """Register a pending future, deliver via WS, and await the response.
+
+        Runs entirely in the uvicorn event loop so the MCP sync thread can block
+        on run_coroutine_threadsafe(...).result() without freezing the loop.
+        """
+        pending = PendingRequest(correlation_id, timeout_sec)
+        async with self.lock:
+            self.pending_requests[correlation_id] = pending
+        try:
+            await self.send_to_agent(recipient, message)
+            return await pending.wait()
+        finally:
+            async with self.lock:
+                self.pending_requests.pop(correlation_id, None)
+
+    async def register_incoming_waiter(self, agent_name: str, timeout_sec: float) -> PendingRequest:
+        """Register this agent as waiting for the next incoming request.
+
+        Returns the PendingRequest to await. The caller must clear it when done.
+        """
+        pending = PendingRequest(f"incoming:{agent_name}", timeout_sec)
+        async with self.incoming_lock:
+            self.incoming_waiters[agent_name] = pending
+        return pending
+
+    async def clear_incoming_waiter(self, agent_name: str):
+        """Remove the incoming waiter for this agent (idempotent)."""
+        async with self.incoming_lock:
+            self.incoming_waiters.pop(agent_name, None)
+
+    async def notify_incoming_request(self, agent_name: str, request_data: dict) -> bool:
+        """If agent_name has a registered wait_for_request() waiter, resolve it immediately.
+
+        Returns True if a waiter was found and notified.
+        """
+        async with self.incoming_lock:
+            pending = self.incoming_waiters.pop(agent_name, None)
+        if pending:
+            pending.resolve(request_data)
+            logger.debug(f"Notified wait_for_request waiter for '{agent_name}'")
+            return True
+        return False
 
     async def get_all_agents(self) -> list[str]:
         async with self.lock:
