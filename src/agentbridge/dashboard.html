@@ -1580,6 +1580,16 @@
             </div>
           </div>
         </div>
+        <div class="settings-section" id="agent-key-section" style="display:none">
+          <div class="settings-section-title">Agent API Key</div>
+          <div style="font-size:12px;color:var(--fg-dim);margin-bottom:8px">Use this key as <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px">AGENTBRIDGE_TOKEN</code> in agent environments. It never expires.</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="agent-key-display" readonly style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--fg);font-size:12px;font-family:monospace" placeholder="Loading…">
+            <button class="btn-secondary" id="agent-key-copy-btn" title="Copy">Copy</button>
+            <button class="btn-secondary" id="agent-key-rotate-btn" title="Rotate key">Rotate</button>
+          </div>
+          <span id="agent-key-status" style="font-size:12px;color:var(--fg-dim);margin-top:4px;display:block"></span>
+        </div>
       </div>
       <!-- Users tab (admin only) -->
       <div id="settings-tab-users" style="display:none">
@@ -1886,6 +1896,8 @@ async function initAuth() {
       si.style.opacity = '0.65';
       // Show change password section for real accounts
       document.getElementById('change-password-section').style.display = '';
+      document.getElementById('agent-key-section').style.display = '';
+      loadAgentKey();
     }
     if (currentUser?.role === 'admin') {
       document.getElementById('users-tab-btn').style.display = '';
@@ -2025,6 +2037,39 @@ async function initAuth() {
       const d = await r.json().catch(() => ({}));
       status.textContent = d.detail || 'Failed to update password.';
     }
+  });
+
+  // Agent API Key section
+  async function loadAgentKey() {
+    try {
+      const r = await fetch(API + '/auth/agent-key', { headers: { 'X-AgentBridge-Token': TOKEN } });
+      if (r.ok) {
+        const d = await r.json();
+        document.getElementById('agent-key-display').value = d.agent_key || '';
+      }
+    } catch (e) {}
+  }
+  document.getElementById('agent-key-copy-btn').addEventListener('click', () => {
+    const val = document.getElementById('agent-key-display').value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).then(() => {
+      const s = document.getElementById('agent-key-status');
+      s.textContent = '✓ Copied to clipboard';
+      setTimeout(() => { s.textContent = ''; }, 2000);
+    });
+  });
+  document.getElementById('agent-key-rotate-btn').addEventListener('click', async () => {
+    if (!confirm('Rotate the agent API key? Existing agents using the old key will need to update it.')) return;
+    const s = document.getElementById('agent-key-status');
+    try {
+      const r = await fetch(API + '/auth/agent-key', { method: 'POST', headers: { 'X-AgentBridge-Token': TOKEN } });
+      if (r.ok) {
+        const d = await r.json();
+        document.getElementById('agent-key-display').value = d.agent_key || '';
+        s.textContent = '✓ Key rotated — update AGENTBRIDGE_TOKEN in agent environments';
+        setTimeout(() => { s.textContent = ''; }, 5000);
+      }
+    } catch (e) { s.textContent = 'Failed to rotate key'; }
   });
 
   async function loadUsers() {
