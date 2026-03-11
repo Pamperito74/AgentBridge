@@ -86,6 +86,8 @@ def register(name: str, role: str):
     """Register this agent with the bridge."""
     result = _post("/agents", {"name": name, "role": role})
     click.echo(f"Registered: {result['name']} ({result.get('role', '')})")
+    if result.get("warning"):
+        click.echo(f"WARNING: {result['warning']}", err=True)
 
 
 @cli.command()
