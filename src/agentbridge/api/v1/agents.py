@@ -26,6 +26,10 @@ class RegisterAgentRequest(BaseModel):
     role: str = Field(default="", max_length=512)
     capabilities: list[str] = Field(default_factory=list)
     agent_type: Literal["bot", "human"] = "bot"
+    is_orchestrator: bool = False
+    autonomous: bool = False
+    autonomous_mode: Literal["all", "decide"] = "decide"
+    watch_threads: list[str] = Field(default_factory=list)
 
 
 class HeartbeatRequest(BaseModel):
@@ -65,14 +69,16 @@ async def http_register_agent(body: RegisterAgentRequest):
     store = get_store()
     existing = await store.get_agent_async(body.name)
     agent = await store.register_agent_async(
-        body.name, body.role, body.capabilities, agent_type=body.agent_type
+        body.name, body.role, body.capabilities, agent_type=body.agent_type,
+        is_orchestrator=body.is_orchestrator, autonomous=body.autonomous,
+        autonomous_mode=body.autonomous_mode, watch_threads=body.watch_threads,
     )
     result = agent.model_dump(mode="json")
     if existing:
         result["warning"] = (
             f"Agent '{body.name}' was already registered — previous instance evicted"
         )
-    broadcast_sse("agent_joined", result)
+    broadcast_sse("agent_joined", result, store)
     await store.log_activity_async(
         action="agent.registered", actor_type="agent", actor_id=body.name,
         entity_type="agent", entity_id=body.name,

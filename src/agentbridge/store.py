@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from .models import Agent, Approval, Artifact, ActivityEntry, ContentBlock, CostEvent, Message, Task, Thread, ThreadSummary
+from .models import Agent, Approval, Artifact, ActivityEntry, AutomationRule, ContentBlock, CostEvent, Message, Task, Thread, ThreadSummary
 
 DB_DIR = Path.home() / ".agentbridge"
 DB_PATH = DB_DIR / "messages.db"
@@ -182,6 +182,16 @@ class MessageStore:
                     created_at TEXT NOT NULL,
                     decided_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS automation_rules (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    trigger_event TEXT NOT NULL,
+                    conditions TEXT DEFAULT '{}',
+                    action_type TEXT NOT NULL,
+                    action_params TEXT DEFAULT '{}',
+                    enabled INTEGER DEFAULT 1,
+                    created_at TEXT NOT NULL
+                );
             """)
             self._conn.commit()
 
@@ -242,6 +252,10 @@ class MessageStore:
                 ("reports_to", "ALTER TABLE agents ADD COLUMN reports_to TEXT"),
                 ("budget_monthly_cents", "ALTER TABLE agents ADD COLUMN budget_monthly_cents INTEGER DEFAULT 0"),
                 ("spent_monthly_cents", "ALTER TABLE agents ADD COLUMN spent_monthly_cents INTEGER DEFAULT 0"),
+                ("is_orchestrator", "ALTER TABLE agents ADD COLUMN is_orchestrator INTEGER DEFAULT 0"),
+                ("autonomous", "ALTER TABLE agents ADD COLUMN autonomous INTEGER DEFAULT 0"),
+                ("autonomous_mode", "ALTER TABLE agents ADD COLUMN autonomous_mode TEXT DEFAULT 'decide'"),
+                ("watch_threads", "ALTER TABLE agents ADD COLUMN watch_threads TEXT DEFAULT '[]'"),
             ]:
                 if col not in agent_cols:
                     self._conn.execute(ddl)
@@ -313,8 +327,12 @@ class MessageStore:
     async def _run_in_thread(self, func, *args, **kwargs):
         return await asyncio.to_thread(func, *args, **kwargs)
 
-    async def register_agent_async(self, name: str, role: str = "", capabilities: list[str] | None = None, agent_type: str = "bot") -> Agent:
-        return await self._run_in_thread(self.register_agent, name, role, capabilities, agent_type)
+    async def register_agent_async(self, name: str, role: str = "", capabilities: list[str] | None = None,
+                                    agent_type: str = "bot", is_orchestrator: bool = False,
+                                    autonomous: bool = False, autonomous_mode: str = "decide",
+                                    watch_threads: list[str] | None = None) -> Agent:
+        return await self._run_in_thread(self.register_agent, name, role, capabilities, agent_type,
+                                         is_orchestrator, autonomous, autonomous_mode, watch_threads)
 
     async def list_agents_async(self) -> list[Agent]:
         return await self._run_in_thread(self.list_agents)
@@ -397,15 +415,11 @@ class MessageStore:
 
     # --- Agents ---
 
-    def get_agent(self, name: str) -> Agent | None:
-        """Look up a single agent by name. Returns None if not found."""
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents WHERE name = ?",
-                (name,)
-            ).fetchone()
-        if not row:
-            return None
+    _AGENT_COLS = ("name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, "
+                   "reports_to, budget_monthly_cents, spent_monthly_cents, "
+                   "is_orchestrator, autonomous, autonomous_mode, watch_threads")
+
+    def _agent_from_row(self, row) -> Agent:
         return Agent(
             name=row[0], role=row[1] or "", status=row[2] or "online",
             working_on=row[3] or "",
@@ -416,19 +430,46 @@ class MessageStore:
             reports_to=row[8],
             budget_monthly_cents=row[9] or 0,
             spent_monthly_cents=row[10] or 0,
+            is_orchestrator=bool(row[11]) if len(row) > 11 else False,
+            autonomous=bool(row[12]) if len(row) > 12 else False,
+            autonomous_mode=row[13] or "decide" if len(row) > 13 else "decide",
+            watch_threads=json.loads(row[14]) if len(row) > 14 and row[14] else [],
         )
+
+    def get_agent(self, name: str) -> Agent | None:
+        """Look up a single agent by name. Returns None if not found."""
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT {self._AGENT_COLS} FROM agents WHERE name = ?", (name,)
+            ).fetchone()
+        if not row:
+            return None
+        return self._agent_from_row(row)
 
     async def get_agent_async(self, name: str) -> Agent | None:
         return await self._run_in_thread(self.get_agent, name)
 
-    def register_agent(self, name: str, role: str = "", capabilities: list[str] | None = None, agent_type: str = "bot") -> Agent:
+    def register_agent(self, name: str, role: str = "", capabilities: list[str] | None = None,
+                        agent_type: str = "bot", is_orchestrator: bool = False,
+                        autonomous: bool = False, autonomous_mode: str = "decide",
+                        watch_threads: list[str] | None = None) -> Agent:
         now = datetime.now(timezone.utc)
         caps = capabilities or []
-        agent = Agent(name=name, role=role, capabilities=caps, agent_type=agent_type, connected_at=now, last_seen=now)
+        wt = watch_threads or []
+        agent = Agent(name=name, role=role, capabilities=caps, agent_type=agent_type,
+                      connected_at=now, last_seen=now, is_orchestrator=is_orchestrator,
+                      autonomous=autonomous, autonomous_mode=autonomous_mode, watch_threads=wt)
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO agents (name, role, status, working_on, capabilities, agent_type, connected_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (agent.name, agent.role, agent.status, agent.working_on, json.dumps(agent.capabilities), agent.agent_type, agent.connected_at.isoformat(), agent.last_seen.isoformat()),
+                """INSERT OR REPLACE INTO agents
+                   (name, role, status, working_on, capabilities, agent_type, connected_at, last_seen,
+                    is_orchestrator, autonomous, autonomous_mode, watch_threads)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (agent.name, agent.role, agent.status, agent.working_on,
+                 json.dumps(agent.capabilities), agent.agent_type,
+                 agent.connected_at.isoformat(), agent.last_seen.isoformat(),
+                 int(agent.is_orchestrator), int(agent.autonomous),
+                 agent.autonomous_mode, json.dumps(agent.watch_threads)),
             )
             self._conn.commit()
         return agent
@@ -448,36 +489,36 @@ class MessageStore:
             )
             self._conn.commit()
             row = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents WHERE name = ?", (name,)
+                f"SELECT {self._AGENT_COLS} FROM agents WHERE name = ?", (name,)
             ).fetchone()
         if not row:
             return None
-        return Agent(
-            name=row[0], role=row[1], status=row[2], working_on=row[3],
-            capabilities=json.loads(row[4]) if row[4] else [],
-            agent_type=row[5] or "bot",
-            connected_at=datetime.fromisoformat(row[6]), last_seen=datetime.fromisoformat(row[7]),
-            reports_to=row[8] if len(row) > 8 else None,
-            budget_monthly_cents=row[9] if len(row) > 9 else 0,
-            spent_monthly_cents=row[10] if len(row) > 10 else 0,
-        )
+        return self._agent_from_row(row)
 
     def list_agents(self) -> list[Agent]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents ORDER BY last_seen DESC"
+                f"SELECT {self._AGENT_COLS} FROM agents ORDER BY last_seen DESC"
+            ).fetchall()
+        return [self._agent_from_row(r) for r in rows]
+
+    def get_orchestrators(self) -> list[Agent]:
+        """Return all agents that are marked as orchestrators."""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT {self._AGENT_COLS} FROM agents WHERE is_orchestrator = 1"
+            ).fetchall()
+        return [self._agent_from_row(r) for r in rows]
+
+    def list_autonomous_agents_for_thread(self, thread: str) -> list[Agent]:
+        """Return autonomous agents that watch a given thread."""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT {self._AGENT_COLS} FROM agents WHERE autonomous = 1"
             ).fetchall()
         return [
-            Agent(
-                name=r[0], role=r[1], status=r[2] or "online", working_on=r[3] or "",
-                capabilities=json.loads(r[4]) if r[4] else [],
-                agent_type=r[5] or "bot",
-                connected_at=datetime.fromisoformat(r[6]), last_seen=datetime.fromisoformat(r[7]),
-                reports_to=r[8],
-                budget_monthly_cents=r[9] or 0,
-                spent_monthly_cents=r[10] or 0,
-            )
-            for r in rows
+            self._agent_from_row(r) for r in rows
+            if thread in (json.loads(r[14]) if r[14] else [])
         ]
 
     def find_agents_by_capability(self, capability: str) -> list[Agent]:
@@ -1447,3 +1488,75 @@ class MessageStore:
 
     async def cancel_approval_async(self, approval_id: str) -> bool:
         return await self._run_in_thread(self.cancel_approval, approval_id)
+
+    # --- Automation Rules ---
+
+    def create_automation_rule(self, name: str, trigger_event: str, action_type: str,
+                                conditions: dict | None = None,
+                                action_params: dict | None = None) -> dict:
+        rule = AutomationRule(name=name, trigger_event=trigger_event, action_type=action_type,
+                              conditions=conditions or {}, action_params=action_params or {})
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO automation_rules (id, name, trigger_event, conditions, action_type, action_params, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (rule.id, rule.name, rule.trigger_event, json.dumps(rule.conditions),
+                 rule.action_type, json.dumps(rule.action_params), 1, rule.created_at.isoformat()),
+            )
+            self._conn.commit()
+        return self._rule_from_id(rule.id)
+
+    def _rule_from_row(self, row) -> dict:
+        return {
+            "id": row[0], "name": row[1], "trigger_event": row[2],
+            "conditions": json.loads(row[3]) if row[3] else {},
+            "action_type": row[4],
+            "action_params": json.loads(row[5]) if row[5] else {},
+            "enabled": bool(row[6]), "created_at": row[7],
+        }
+
+    def _rule_from_id(self, rule_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, name, trigger_event, conditions, action_type, action_params, enabled, created_at FROM automation_rules WHERE id = ?",
+                (rule_id,)
+            ).fetchone()
+        return self._rule_from_row(row) if row else None
+
+    def list_automation_rules(self, trigger_event: str | None = None, enabled_only: bool = False) -> list[dict]:
+        query = "SELECT id, name, trigger_event, conditions, action_type, action_params, enabled, created_at FROM automation_rules WHERE 1=1"
+        params: list = []
+        if trigger_event:
+            query += " AND trigger_event = ?"
+            params.append(trigger_event)
+        if enabled_only:
+            query += " AND enabled = 1"
+        query += " ORDER BY created_at ASC"
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._rule_from_row(r) for r in rows]
+
+    def set_automation_rule_enabled(self, rule_id: str, enabled: bool) -> bool:
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE automation_rules SET enabled = ? WHERE id = ?", (int(enabled), rule_id)
+            )
+            self._conn.commit()
+        return result.rowcount > 0
+
+    def delete_automation_rule(self, rule_id: str) -> bool:
+        with self._lock:
+            result = self._conn.execute("DELETE FROM automation_rules WHERE id = ?", (rule_id,))
+            self._conn.commit()
+        return result.rowcount > 0
+
+    async def create_automation_rule_async(self, *args, **kwargs) -> dict:
+        return await self._run_in_thread(self.create_automation_rule, *args, **kwargs)
+
+    async def list_automation_rules_async(self, **kwargs) -> list[dict]:
+        return await self._run_in_thread(self.list_automation_rules, **kwargs)
+
+    async def set_automation_rule_enabled_async(self, rule_id: str, enabled: bool) -> bool:
+        return await self._run_in_thread(self.set_automation_rule_enabled, rule_id, enabled)
+
+    async def delete_automation_rule_async(self, rule_id: str) -> bool:
+        return await self._run_in_thread(self.delete_automation_rule, rule_id)

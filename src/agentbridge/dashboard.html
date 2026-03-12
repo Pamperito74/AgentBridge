@@ -2360,6 +2360,44 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  /* ── Automation panel ── */
+  .rule-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .rule-card.builtin { border-left: 3px solid var(--accent); }
+  .rule-card.disabled { opacity: 0.5; }
+  .rule-body { flex: 1; min-width: 0; }
+  .rule-name { font-size: var(--fs-sm); font-weight: 600; color: var(--fg); margin-bottom: 3px; }
+  .rule-meta { font-size: 11px; color: var(--fg-muted); font-family: var(--font-mono); }
+  .rule-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .rule-tag.event { background: var(--blue-dim); color: var(--blue); }
+  .rule-tag.action { background: var(--green-dim); color: var(--green); }
+  .rule-tag.builtin { background: var(--accent-bg); color: var(--accent); }
+  .automation-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    min-width: 120px;
+  }
+  .automation-stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-muted); }
+  .automation-stat-value { font-size: var(--fs-md); font-weight: 700; color: var(--fg); margin-top: 2px; }
+  .automation-stat-value.active { color: var(--green); }
 </style>
 </head>
 <body>
@@ -2602,6 +2640,7 @@
     <button class="main-nav-btn" data-view="costs" onclick="switchView('costs')">Costs</button>
     <button class="main-nav-btn" data-view="approvals" onclick="switchView('approvals')">Approvals<span class="nav-badge" id="approvals-badge" style="display:none">0</span></button>
     <button class="main-nav-btn" data-view="activity" onclick="switchView('activity')">Activity</button>
+    <button class="main-nav-btn" data-view="automation" onclick="switchView('automation')">Automation</button>
   </nav>
   <div class="header-right">
     <div class="agent-count">
@@ -2841,6 +2880,23 @@
     </div>
   </div>
 
+  <!-- ── Automation Panel ── -->
+  <div class="extra-panel" id="panel-automation">
+    <div class="extra-panel-header">
+      <span class="extra-panel-title">Automation</span>
+      <button class="btn-sm" style="margin-left:auto" onclick="openCreateRule()">+ New Rule</button>
+    </div>
+    <div class="extra-panel-body">
+      <div id="automation-status-bar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg-muted);margin-bottom:8px">Built-in Rules</div>
+      <div id="builtin-rules-list"></div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--fg-muted);margin:14px 0 8px">Custom Rules</div>
+      <div id="custom-rules-list">
+        <div class="muted-row">No custom rules</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Activity Panel ── -->
   <div class="extra-panel" id="panel-activity">
     <div class="extra-panel-header">
@@ -2883,6 +2939,51 @@
     <div class="modal-actions">
       <button class="btn-sm secondary" onclick="closeCreateTask()">Cancel</button>
       <button class="btn-sm" onclick="submitCreateTask()">Create Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Create Rule Modal ── -->
+<div class="modal-overlay hidden" id="create-rule-modal">
+  <div class="modal-card">
+    <div class="modal-title">New Automation Rule</div>
+    <div class="modal-field">
+      <label>Name *</label>
+      <input type="text" id="rule-name-input" placeholder="e.g. High-priority → alert admin" maxlength="256">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="modal-field">
+        <label>Trigger Event *</label>
+        <select id="rule-event-input">
+          <option value="task_created">task_created</option>
+          <option value="task_updated">task_updated</option>
+          <option value="task_completed">task_completed</option>
+          <option value="message">message</option>
+          <option value="agent_joined">agent_joined</option>
+          <option value="approval_requested">approval_requested</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Action *</label>
+        <select id="rule-action-input">
+          <option value="notify_orchestrator">notify_orchestrator</option>
+          <option value="assign_task">assign_task</option>
+          <option value="send_message">send_message</option>
+          <option value="forward_to_agent">forward_to_agent</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Conditions (JSON) — leave {} to match all</label>
+      <textarea id="rule-conditions-input" rows="2" placeholder='{"priority":"critical"}'>{}</textarea>
+    </div>
+    <div class="modal-field">
+      <label>Action Params (JSON)</label>
+      <textarea id="rule-params-input" rows="2" placeholder='{"assignee":"claude"}'>{}</textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-sm secondary" onclick="closeCreateRule()">Cancel</button>
+      <button class="btn-sm" onclick="submitCreateRule()">Create Rule</button>
     </div>
   </div>
 </div>
@@ -4703,6 +4804,8 @@ function switchView(view) {
     loadApprovals();
   } else if (view === 'activity') {
     loadActivity();
+  } else if (view === 'automation') {
+    loadAutomation();
   }
 }
 
@@ -4953,6 +5056,136 @@ function renderActivity(entries) {
       <span class="activity-entity">${e.entity_id ? esc(e.entity_type + ':' + e.entity_id) : ''}</span>
     </div>
   `).join('');
+}
+
+// ── Automation ──────────────────────────────────────────────────────────
+async function loadAutomation() {
+  try {
+    const [rules, status] = await Promise.all([
+      api('/automation/rules'),
+      api('/automation/status'),
+    ]);
+    renderAutomationStatus(status);
+    renderBuiltinRules(rules.builtin || []);
+    renderCustomRules(rules.custom || []);
+  } catch (err) {}
+}
+
+function renderAutomationStatus(status) {
+  const bar = document.getElementById('automation-status-bar');
+  const orchs = (status.orchestrators || []).join(', ') || 'none';
+  const autos = (status.autonomous_agents || []).join(', ') || 'none';
+  bar.innerHTML = `
+    <div class="automation-stat">
+      <div class="automation-stat-label">Orchestrators</div>
+      <div class="automation-stat-value ${status.orchestrators?.length ? 'active' : ''}">${esc(orchs)}</div>
+    </div>
+    <div class="automation-stat">
+      <div class="automation-stat-label">Autonomous agents</div>
+      <div class="automation-stat-value ${status.autonomous_agents?.length ? 'active' : ''}">${esc(autos)}</div>
+    </div>
+    <div class="automation-stat">
+      <div class="automation-stat-label">Built-in rules</div>
+      <div class="automation-stat-value active">${status.builtin_rules}</div>
+    </div>
+    <div class="automation-stat">
+      <div class="automation-stat-label">Custom rules</div>
+      <div class="automation-stat-value">${status.enabled_custom_rules} / ${status.custom_rules}</div>
+    </div>
+  `;
+}
+
+function renderBuiltinRules(rules) {
+  const el = document.getElementById('builtin-rules-list');
+  el.innerHTML = rules.map(r => `
+    <div class="rule-card builtin">
+      <div class="rule-body">
+        <div class="rule-name">${esc(r.name)}</div>
+        <div class="rule-meta">
+          <span class="rule-tag event">${esc(r.trigger_event)}</span>
+          <span class="rule-tag action">${esc(r.action_type)}</span>
+          <span class="rule-tag builtin">built-in</span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--green);font-weight:600">Always on</div>
+    </div>
+  `).join('');
+}
+
+function renderCustomRules(rules) {
+  const el = document.getElementById('custom-rules-list');
+  if (!rules.length) {
+    el.innerHTML = '<div class="muted-row">No custom rules — click + New Rule to add one</div>';
+    return;
+  }
+  el.innerHTML = rules.map(r => `
+    <div class="rule-card ${r.enabled ? '' : 'disabled'}">
+      <div class="rule-body">
+        <div class="rule-name">${esc(r.name)}</div>
+        <div class="rule-meta">
+          <span class="rule-tag event">${esc(r.trigger_event)}</span>
+          <span class="rule-tag action">${esc(r.action_type)}</span>
+          ${Object.keys(r.conditions||{}).length ? `<span style="color:var(--fg-muted)">if ${esc(JSON.stringify(r.conditions))}</span>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn-sm secondary" onclick="toggleRule('${esc(r.id)}',${!r.enabled})">${r.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="btn-sm danger" onclick="deleteRule('${esc(r.id)}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function toggleRule(id, enabled) {
+  try {
+    await api(`/automation/rules/${id}?enabled=${enabled}`, { method: 'PATCH' });
+    loadAutomation();
+  } catch (err) {
+    showToast('Failed: ' + err.message, 'error');
+  }
+}
+
+async function deleteRule(id) {
+  if (!confirm('Delete this rule?')) return;
+  try {
+    await api(`/automation/rules/${id}`, { method: 'DELETE' });
+    loadAutomation();
+    showToast('Rule deleted');
+  } catch (err) {
+    showToast('Failed: ' + err.message, 'error');
+  }
+}
+
+function openCreateRule() {
+  document.getElementById('create-rule-modal').classList.remove('hidden');
+  document.getElementById('rule-name-input').focus();
+}
+function closeCreateRule() {
+  document.getElementById('create-rule-modal').classList.add('hidden');
+}
+async function submitCreateRule() {
+  const name = document.getElementById('rule-name-input').value.trim();
+  const trigger_event = document.getElementById('rule-event-input').value;
+  const action_type = document.getElementById('rule-action-input').value;
+  let conditions, action_params;
+  try { conditions = JSON.parse(document.getElementById('rule-conditions-input').value || '{}'); }
+  catch { showToast('Conditions must be valid JSON', 'error'); return; }
+  try { action_params = JSON.parse(document.getElementById('rule-params-input').value || '{}'); }
+  catch { showToast('Action params must be valid JSON', 'error'); return; }
+  if (!name) { showToast('Name is required', 'error'); return; }
+  try {
+    await api('/automation/rules', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, trigger_event, action_type, conditions, action_params }),
+    });
+    closeCreateRule();
+    document.getElementById('rule-name-input').value = '';
+    loadAutomation();
+    showToast('Rule created');
+  } catch (err) {
+    showToast('Failed: ' + err.message, 'error');
+  }
 }
 
 // ── Resize handles

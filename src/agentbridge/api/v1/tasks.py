@@ -44,7 +44,7 @@ async def create_task(body: CreateTaskRequest):
         status=body.status, priority=body.priority, assignee=body.assignee,
         thread=body.thread, parent_id=body.parent_id, labels=body.labels,
     )
-    broadcast_sse("task_created", task)
+    broadcast_sse("task_created", task, store)
     await store.log_activity_async(
         action="task.created", actor_type="user", actor_id=body.created_by,
         entity_type="task", entity_id=task["id"],
