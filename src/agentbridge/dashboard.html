@@ -1961,6 +1961,405 @@
   .user-menu-item[tabindex], .mention-option[tabindex] {
     /* already have cursor:pointer, just ensure outline shows on focus */
   }
+
+  /* ── Main nav tabs (Messages / Tasks / Costs / Approvals / Activity) ── */
+  .main-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 var(--space-3);
+    flex: 1;
+  }
+  .main-nav-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-family: var(--font-ui);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+  }
+  .main-nav-btn:hover { background: var(--bg-hover); color: var(--fg); }
+  .main-nav-btn.active { color: var(--accent); background: var(--accent-bg); }
+  .main-nav-btn .nav-badge {
+    position: absolute;
+    top: 2px; right: 2px;
+    background: var(--accent-2);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 99px;
+    min-width: 14px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* ── Extra panels (tasks, costs, approvals, activity) ── */
+  .extra-panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+  }
+  .extra-panel.active { display: flex; }
+  .extra-panel-header {
+    padding: 12px 20px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .extra-panel-title {
+    font-size: var(--fs-md);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .extra-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  /* ── Tasks panel ── */
+  .tasks-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+  }
+  .tasks-toolbar select, .tasks-toolbar input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: var(--fs-xs);
+    padding: 4px 8px;
+  }
+  .btn-sm {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-ui);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .btn-sm:hover { background: var(--accent-dim); }
+  .btn-sm.secondary {
+    background: var(--bg-elevated, var(--bg-elev));
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .btn-sm.secondary:hover { background: var(--bg-hover); }
+  .btn-sm.danger { background: var(--red); }
+  .btn-sm.danger:hover { background: #b91c1c; }
+  .kanban {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .kanban-col {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .kanban-col-header {
+    padding: 8px 12px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+    background: var(--bg-elevated, var(--bg-elev));
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kanban-col-header .col-count {
+    background: var(--bg-hover);
+    border-radius: 99px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: var(--fg-muted);
+  }
+  .kanban-cards {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 40px;
+  }
+  .task-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 11px;
+    cursor: pointer;
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+  .task-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+  .task-card-title {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 4px;
+    line-height: 1.35;
+  }
+  .task-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+    font-size: 10px;
+    color: var(--fg-muted);
+  }
+  .task-priority {
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 700;
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+  .task-priority.critical { background: var(--red-dim); color: var(--red); }
+  .task-priority.high { background: var(--yellow-dim); color: var(--yellow); }
+  .task-priority.medium { background: var(--blue-dim); color: var(--blue); }
+  .task-priority.low { background: var(--green-dim); color: var(--green); }
+  .task-assignee {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ── Create task modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    width: 480px;
+    max-width: 95vw;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-title {
+    font-size: var(--fs-md);
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .modal-field {
+    margin-bottom: 12px;
+  }
+  .modal-field label {
+    display: block;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin-bottom: 4px;
+  }
+  .modal-field input, .modal-field textarea, .modal-field select {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: var(--fs-sm);
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .modal-field input:focus, .modal-field textarea:focus, .modal-field select:focus {
+    border-color: var(--accent);
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  /* ── Costs panel ── */
+  .costs-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cost-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+  .cost-stat-label {
+    font-size: var(--fs-xxs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+    margin-bottom: 4px;
+  }
+  .cost-stat-value {
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+  }
+  .costs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-xs);
+  }
+  .costs-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    color: var(--fg-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .costs-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg);
+  }
+  .costs-table tr:last-child td { border-bottom: none; }
+  .costs-table tr:hover td { background: var(--bg-hover); }
+  .budget-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .budget-bar {
+    height: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    flex: 1;
+    overflow: hidden;
+  }
+  .budget-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--green);
+    transition: width 0.3s;
+  }
+  .budget-bar-fill.warn { background: var(--yellow); }
+  .budget-bar-fill.over { background: var(--red); }
+
+  /* ── Approvals panel ── */
+  .approval-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .approval-status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .approval-status-dot.pending { background: var(--yellow); }
+  .approval-status-dot.approved { background: var(--green); }
+  .approval-status-dot.rejected { background: var(--red); }
+  .approval-status-dot.cancelled { background: var(--fg-muted); }
+  .approval-body { flex: 1; min-width: 0; }
+  .approval-type {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .approval-requester {
+    font-size: var(--fs-sm);
+    color: var(--fg);
+    margin-bottom: 4px;
+  }
+  .approval-payload {
+    font-size: var(--fs-xs);
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--bg-elevated, var(--bg-elev));
+    border-radius: 4px;
+    padding: 4px 7px;
+    margin-bottom: 6px;
+  }
+  .approval-actions { display: flex; gap: 6px; flex-shrink: 0; flex-direction: column; }
+
+  /* ── Activity panel ── */
+  .activity-entry {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+    font-size: var(--fs-xs);
+  }
+  .activity-entry:last-child { border-bottom: none; }
+  .activity-time {
+    color: var(--fg-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding-top: 1px;
+    min-width: 60px;
+  }
+  .activity-actor {
+    color: var(--accent);
+    font-weight: 600;
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+  .activity-action {
+    font-family: var(--font-mono);
+    color: var(--fg-dim);
+    background: var(--bg-elevated, var(--bg-elev));
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .activity-entity {
+    color: var(--fg);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -2197,6 +2596,13 @@
     <div class="logo-dot" id="logo-dot"></div>
     AgentBridge
   </div>
+  <nav class="main-nav" aria-label="Main navigation">
+    <button class="main-nav-btn active" data-view="messages" onclick="switchView('messages')">Messages</button>
+    <button class="main-nav-btn" data-view="tasks" onclick="switchView('tasks')">Tasks</button>
+    <button class="main-nav-btn" data-view="costs" onclick="switchView('costs')">Costs</button>
+    <button class="main-nav-btn" data-view="approvals" onclick="switchView('approvals')">Approvals<span class="nav-badge" id="approvals-badge" style="display:none">0</span></button>
+    <button class="main-nav-btn" data-view="activity" onclick="switchView('activity')">Activity</button>
+  </nav>
   <div class="header-right">
     <div class="agent-count">
       <span id="agent-count-num">0</span> online
@@ -2345,7 +2751,141 @@
       </div>
     </div>
   </div>
+
+  <!-- ── Tasks Panel ── -->
+  <div class="extra-panel" id="panel-tasks">
+    <div class="extra-panel-header">
+      <span class="extra-panel-title">Tasks</span>
+      <div class="tasks-toolbar">
+        <select id="tasks-filter-status" onchange="loadTasks()">
+          <option value="">All statuses</option>
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="in_review">In Review</option>
+          <option value="blocked">Blocked</option>
+          <option value="done">Done</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="tasks-filter-priority" onchange="loadTasks()">
+          <option value="">All priorities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn-sm" onclick="openCreateTask()">+ New Task</button>
+      </div>
+    </div>
+    <div class="extra-panel-body">
+      <div class="kanban" id="kanban-board">
+        <div class="kanban-col" id="col-todo">
+          <div class="kanban-col-header">Todo <span class="col-count" id="count-todo">0</span></div>
+          <div class="kanban-cards" id="cards-todo"></div>
+        </div>
+        <div class="kanban-col" id="col-in_progress">
+          <div class="kanban-col-header">In Progress <span class="col-count" id="count-in_progress">0</span></div>
+          <div class="kanban-cards" id="cards-in_progress"></div>
+        </div>
+        <div class="kanban-col" id="col-in_review">
+          <div class="kanban-col-header">In Review <span class="col-count" id="count-in_review">0</span></div>
+          <div class="kanban-cards" id="cards-in_review"></div>
+        </div>
+        <div class="kanban-col" id="col-done">
+          <div class="kanban-col-header">Done <span class="col-count" id="count-done">0</span></div>
+          <div class="kanban-cards" id="cards-done"></div>
+        </div>
+        <div class="kanban-col" id="col-blocked">
+          <div class="kanban-col-header">Blocked <span class="col-count" id="count-blocked">0</span></div>
+          <div class="kanban-cards" id="cards-blocked"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Costs Panel ── -->
+  <div class="extra-panel" id="panel-costs">
+    <div class="extra-panel-header">
+      <span class="extra-panel-title">Costs &amp; Usage</span>
+      <button class="btn-sm secondary" style="margin-left:auto" onclick="loadCosts()">Refresh</button>
+    </div>
+    <div class="extra-panel-body">
+      <div class="costs-summary" id="costs-summary"></div>
+      <table class="costs-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Input tokens</th>
+            <th>Output tokens</th>
+            <th>Cost</th>
+            <th>Budget</th>
+          </tr>
+        </thead>
+        <tbody id="costs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Approvals Panel ── -->
+  <div class="extra-panel" id="panel-approvals">
+    <div class="extra-panel-header">
+      <span class="extra-panel-title">Approvals</span>
+      <select id="approvals-filter-status" style="margin-left:auto" onchange="loadApprovals()">
+        <option value="pending">Pending</option>
+        <option value="">All</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+    <div class="extra-panel-body" id="approvals-body">
+      <div class="muted-row">No approvals</div>
+    </div>
+  </div>
+
+  <!-- ── Activity Panel ── -->
+  <div class="extra-panel" id="panel-activity">
+    <div class="extra-panel-header">
+      <span class="extra-panel-title">Activity Log</span>
+      <button class="btn-sm secondary" style="margin-left:auto" onclick="loadActivity()">Refresh</button>
+    </div>
+    <div class="extra-panel-body" id="activity-body">
+      <div class="muted-row">No activity yet</div>
+    </div>
+  </div>
 </main>
+
+<!-- ── Create Task Modal ── -->
+<div class="modal-overlay hidden" id="create-task-modal">
+  <div class="modal-card">
+    <div class="modal-title">New Task</div>
+    <div class="modal-field">
+      <label>Title *</label>
+      <input type="text" id="task-title-input" placeholder="What needs to be done?" maxlength="512">
+    </div>
+    <div class="modal-field">
+      <label>Description</label>
+      <textarea id="task-desc-input" rows="3" placeholder="Optional details…" maxlength="4096"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="modal-field">
+        <label>Priority</label>
+        <select id="task-priority-input">
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Assignee</label>
+        <input type="text" id="task-assignee-input" placeholder="Agent or username">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-sm secondary" onclick="closeCreateTask()">Cancel</button>
+      <button class="btn-sm" onclick="submitCreateTask()">Create Task</button>
+    </div>
+  </div>
+</div>
 
 <div class="ab-toast" id="ab-toast" aria-live="assertive" aria-atomic="true"></div>
 
@@ -4085,6 +4625,334 @@ function connectSSE() {
     renderThreads();
     addSystemMsg(`Thread #${t.name} created`);
   });
+
+  es.addEventListener('task_created', e => {
+    if (currentView === 'tasks') loadTasks();
+    else pendingTaskRefresh = true;
+  });
+  es.addEventListener('task_updated', e => {
+    if (currentView === 'tasks') loadTasks();
+    else pendingTaskRefresh = true;
+  });
+  es.addEventListener('task_completed', e => {
+    if (currentView === 'tasks') loadTasks();
+    else pendingTaskRefresh = true;
+  });
+  es.addEventListener('task_deleted', e => {
+    if (currentView === 'tasks') loadTasks();
+    else pendingTaskRefresh = true;
+  });
+  es.addEventListener('approval_requested', e => {
+    pendingApprovalsCount++;
+    updateApprovalsBadge();
+    if (currentView === 'approvals') loadApprovals();
+  });
+  es.addEventListener('approval_decided', e => {
+    if (currentView === 'approvals') loadApprovals();
+  });
+  es.addEventListener('budget_exceeded', e => {
+    const d = JSON.parse(e.data);
+    addSystemMsg(`Budget exceeded: ${d.agent_name} spent ${d.spent_cents}¢ of ${d.budget_cents}¢`);
+    if (currentView === 'costs') loadCosts();
+  });
+}
+
+// ── View switching ──────────────────────────────────────────────────────
+let currentView = 'messages';
+let pendingTaskRefresh = false;
+let pendingApprovalsCount = 0;
+
+function updateApprovalsBadge() {
+  const badge = document.getElementById('approvals-badge');
+  if (!badge) return;
+  if (pendingApprovalsCount > 0) {
+    badge.textContent = pendingApprovalsCount;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.main-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+
+  const messagesPanel = document.querySelector('.messages-panel');
+  const composePanel = document.querySelector('.compose-panel');
+  const rzCompose = document.getElementById('rz-compose');
+  const rzMainSplit = document.getElementById('rz-main-split');
+  const isMessages = view === 'messages';
+
+  messagesPanel.style.display = isMessages ? '' : 'none';
+  if (composePanel) composePanel.style.display = isMessages ? '' : 'none';
+  if (rzCompose) rzCompose.style.display = isMessages ? '' : 'none';
+  if (rzMainSplit) rzMainSplit.style.display = isMessages ? '' : 'none';
+
+  document.querySelectorAll('.extra-panel').forEach(p => {
+    p.classList.toggle('active', p.id === `panel-${view}`);
+  });
+
+  if (view === 'tasks') {
+    loadTasks();
+    pendingTaskRefresh = false;
+  } else if (view === 'costs') {
+    loadCosts();
+  } else if (view === 'approvals') {
+    pendingApprovalsCount = 0;
+    updateApprovalsBadge();
+    loadApprovals();
+  } else if (view === 'activity') {
+    loadActivity();
+  }
+}
+
+// ── Tasks ───────────────────────────────────────────────────────────────
+const KANBAN_COLS = ['todo', 'in_progress', 'in_review', 'done', 'blocked'];
+
+async function loadTasks() {
+  const status = document.getElementById('tasks-filter-status')?.value || '';
+  const priority = document.getElementById('tasks-filter-priority')?.value || '';
+  const params = new URLSearchParams({ limit: '200' });
+  if (status) params.set('status', status);
+  if (priority) params.set('priority', priority);
+  try {
+    const tasks = await api('/tasks?' + params.toString());
+    renderKanban(tasks);
+  } catch (err) {
+    // silently fail if endpoint not yet live
+  }
+}
+
+function renderKanban(tasks) {
+  const grouped = {};
+  KANBAN_COLS.forEach(c => { grouped[c] = []; });
+  tasks.forEach(t => {
+    const col = grouped[t.status] || grouped['todo'];
+    col.push(t);
+  });
+  KANBAN_COLS.forEach(col => {
+    const cards = document.getElementById(`cards-${col}`);
+    const count = document.getElementById(`count-${col}`);
+    if (!cards) return;
+    count.textContent = grouped[col].length;
+    if (!grouped[col].length) {
+      cards.innerHTML = '<div style="color:var(--fg-muted);font-size:11px;padding:6px 4px;text-align:center">Empty</div>';
+      return;
+    }
+    cards.innerHTML = grouped[col].map(t => `
+      <div class="task-card" onclick="openTaskDetail('${esc(t.id)}')">
+        <div class="task-card-title">${esc(t.title)}</div>
+        <div class="task-card-meta">
+          <span class="task-priority ${esc(t.priority)}">${esc(t.priority)}</span>
+          ${t.assignee ? `<span class="task-assignee">@${esc(t.assignee)}</span>` : ''}
+          ${t.labels?.length ? `<span>${t.labels.slice(0,2).map(l => esc(l)).join(', ')}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+function openTaskDetail(id) {
+  // inline update: cycle status forward
+  const cols = ['todo', 'in_progress', 'in_review', 'done'];
+  api(`/tasks/${id}`).then(t => {
+    const cur = cols.indexOf(t.status);
+    const next = cols[(cur + 1) % cols.length];
+    if (confirm(`Move "${t.title}" from ${t.status} → ${next}?`)) {
+      api(`/tasks/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: next }) })
+        .then(() => loadTasks())
+        .catch(err => showToast('Update failed: ' + err.message, 'error'));
+    }
+  }).catch(() => {});
+}
+
+function openCreateTask() {
+  document.getElementById('create-task-modal').classList.remove('hidden');
+  document.getElementById('task-title-input').focus();
+}
+function closeCreateTask() {
+  document.getElementById('create-task-modal').classList.add('hidden');
+}
+async function submitCreateTask() {
+  const title = document.getElementById('task-title-input').value.trim();
+  if (!title) { showToast('Title is required', 'error'); return; }
+  const body = {
+    title,
+    description: document.getElementById('task-desc-input').value.trim(),
+    priority: document.getElementById('task-priority-input').value,
+    assignee: document.getElementById('task-assignee-input').value.trim() || null,
+    created_by: currentSenderName() || 'dashboard',
+    thread: 'general',
+  };
+  try {
+    await api('/tasks', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    closeCreateTask();
+    document.getElementById('task-title-input').value = '';
+    document.getElementById('task-desc-input').value = '';
+    loadTasks();
+    showToast('Task created');
+  } catch (err) {
+    showToast('Create failed: ' + err.message, 'error');
+  }
+}
+
+// ── Costs ───────────────────────────────────────────────────────────────
+async function loadCosts() {
+  try {
+    const [platform, agents_list] = await Promise.all([
+      api('/costs/summary'),
+      api('/agents'),
+    ]);
+    renderCosts(platform, agents_list);
+  } catch (err) {}
+}
+
+function fmtCost(cents) {
+  if (cents < 100) return `${cents}¢`;
+  return `$${(cents / 100).toFixed(2)}`;
+}
+function fmtNum(n) {
+  if (n >= 1_000_000) return (n/1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n/1_000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderCosts(platform, agents_list) {
+  const summary = document.getElementById('costs-summary');
+  summary.innerHTML = `
+    <div class="cost-stat">
+      <div class="cost-stat-label">Total Cost</div>
+      <div class="cost-stat-value">${fmtCost(platform.total_cost_cents)}</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-stat-label">Input Tokens</div>
+      <div class="cost-stat-value">${fmtNum(platform.total_input_tokens)}</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-stat-label">Output Tokens</div>
+      <div class="cost-stat-value">${fmtNum(platform.total_output_tokens)}</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-stat-label">Events</div>
+      <div class="cost-stat-value">${platform.event_count}</div>
+    </div>
+  `;
+
+  const byAgent = platform.by_agent || [];
+  const agentMap = {};
+  agents_list.forEach(a => { agentMap[a.name] = a; });
+
+  const tbody = document.getElementById('costs-tbody');
+  if (!byAgent.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--fg-muted);padding:20px">No cost data yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = byAgent.map(row => {
+    const agent = agentMap[row.agent_name] || {};
+    const budget = agent.budget_monthly_cents || 0;
+    const spent = agent.spent_monthly_cents || row.cost_cents;
+    const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : null;
+    const fillClass = pct === null ? '' : pct >= 100 ? 'over' : pct >= 80 ? 'warn' : '';
+    const budgetCell = budget > 0
+      ? `<div class="budget-bar-wrap">
+           <div class="budget-bar"><div class="budget-bar-fill ${fillClass}" style="width:${pct||0}%"></div></div>
+           <span style="font-size:10px;color:var(--fg-muted)">${Math.round(pct||0)}%</span>
+         </div>`
+      : '<span style="color:var(--fg-muted)">—</span>';
+    return `<tr>
+      <td><strong>${esc(row.agent_name)}</strong></td>
+      <td>${fmtNum(row.input_tokens)}</td>
+      <td>${fmtNum(row.output_tokens)}</td>
+      <td>${fmtCost(row.cost_cents)}</td>
+      <td>${budgetCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Approvals ───────────────────────────────────────────────────────────
+async function loadApprovals() {
+  const status = document.getElementById('approvals-filter-status')?.value || 'pending';
+  const params = new URLSearchParams({ limit: '50' });
+  if (status) params.set('status', status);
+  try {
+    const approvals = await api('/approvals?' + params.toString());
+    renderApprovals(approvals);
+  } catch (err) {}
+}
+
+function renderApprovals(approvals) {
+  const body = document.getElementById('approvals-body');
+  if (!approvals.length) {
+    body.innerHTML = '<div class="muted-row">No approvals</div>';
+    return;
+  }
+  body.innerHTML = approvals.map(a => {
+    const isPending = a.status === 'pending';
+    const payloadStr = Object.keys(a.payload).length ? JSON.stringify(a.payload, null, 2) : null;
+    return `<div class="approval-card">
+      <div class="approval-status-dot ${esc(a.status)}"></div>
+      <div class="approval-body">
+        <div class="approval-type">${esc(a.type)}</div>
+        <div class="approval-requester">Requested by <strong>${esc(a.requested_by)}</strong></div>
+        ${payloadStr ? `<pre class="approval-payload">${esc(payloadStr)}</pre>` : ''}
+        ${a.decision_note ? `<div style="font-size:11px;color:var(--fg-dim)">Note: ${esc(a.decision_note)}</div>` : ''}
+        <div style="font-size:10px;color:var(--fg-muted);margin-top:4px">${new Date(a.created_at).toLocaleString()}</div>
+      </div>
+      ${isPending ? `<div class="approval-actions">
+        <button class="btn-sm" onclick="decideApproval('${esc(a.id)}','approve')">Approve</button>
+        <button class="btn-sm danger" onclick="decideApproval('${esc(a.id)}','reject')">Reject</button>
+      </div>` : `<div style="font-size:11px;color:var(--fg-muted);padding-top:2px">${esc(a.status)}</div>`}
+    </div>`;
+  }).join('');
+}
+
+async function decideApproval(id, decision) {
+  const decided_by = currentSenderName() || 'dashboard';
+  const note = decision === 'reject' ? (prompt('Rejection note (optional):') || undefined) : undefined;
+  try {
+    await api(`/approvals/${id}/${decision}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ decided_by, decision_note: note }),
+    });
+    loadApprovals();
+    showToast(`Approval ${decision}d`);
+  } catch (err) {
+    showToast('Action failed: ' + err.message, 'error');
+  }
+}
+
+// ── Activity ────────────────────────────────────────────────────────────
+async function loadActivity() {
+  try {
+    const entries = await api('/activity?limit=100');
+    renderActivity(entries);
+  } catch (err) {}
+}
+
+function timeAgo(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function renderActivity(entries) {
+  const body = document.getElementById('activity-body');
+  if (!entries.length) {
+    body.innerHTML = '<div class="muted-row">No activity yet</div>';
+    return;
+  }
+  body.innerHTML = entries.map(e => `
+    <div class="activity-entry">
+      <span class="activity-time">${timeAgo(e.created_at)}</span>
+      <span class="activity-actor">${esc(e.actor_id || e.actor_type)}</span>
+      <span class="activity-action">${esc(e.action)}</span>
+      <span class="activity-entity">${e.entity_id ? esc(e.entity_type + ':' + e.entity_id) : ''}</span>
+    </div>
+  `).join('');
 }
 
 // ── Resize handles

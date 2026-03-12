@@ -62,8 +62,9 @@ def _agent_active_window_sec() -> int:
 
 @router.post("/agents")
 async def http_register_agent(body: RegisterAgentRequest):
-    existing = await get_store().get_agent_async(body.name)
-    agent = await get_store().register_agent_async(
+    store = get_store()
+    existing = await store.get_agent_async(body.name)
+    agent = await store.register_agent_async(
         body.name, body.role, body.capabilities, agent_type=body.agent_type
     )
     result = agent.model_dump(mode="json")
@@ -72,6 +73,11 @@ async def http_register_agent(body: RegisterAgentRequest):
             f"Agent '{body.name}' was already registered — previous instance evicted"
         )
     broadcast_sse("agent_joined", result)
+    await store.log_activity_async(
+        action="agent.registered", actor_type="agent", actor_id=body.name,
+        entity_type="agent", entity_id=body.name,
+        details={"role": body.role, "agent_type": body.agent_type},
+    )
     return result
 
 
@@ -113,6 +119,7 @@ async def http_list_actors():
 
 @router.delete("/agents/{name}")
 async def http_kick_agent(name: str):
+    store = get_store()
     manager = get_ws_manager()
     loop = get_uvicorn_loop()
     if loop and loop.is_running() and manager.is_connected(name):
@@ -122,8 +129,11 @@ async def http_kick_agent(name: str):
             ).result(timeout=2)
         except Exception:
             pass
-    await get_store().remove_agent_async(name)
+    await store.remove_agent_async(name)
     broadcast_sse("agent_kicked", {"name": name})
+    await store.log_activity_async(
+        action="agent.kicked", entity_type="agent", entity_id=name
+    )
     return {"kicked": name}
 
 

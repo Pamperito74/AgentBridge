@@ -57,11 +57,16 @@ def _get_auth_token() -> str:
 
 @router.post("/admin/clear")
 async def http_clear_board(body: ClearBoardRequest | None = None):
+    store = get_store()
     payload = body or ClearBoardRequest()
-    await get_store()._run_in_thread(get_store().clear_board, payload.include_threads)
+    await store._run_in_thread(store.clear_board, payload.include_threads)
     broadcast_sse(
         "system",
         {"type": "clear", "include_threads": payload.include_threads},
+    )
+    await store.log_activity_async(
+        action="admin.board_cleared",
+        details={"include_threads": payload.include_threads},
     )
     return {"cleared": True, "include_threads": payload.include_threads}
 

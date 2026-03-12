@@ -19,6 +19,63 @@ class Agent(BaseModel):
     agent_type: str = "bot"  # 'bot' | 'human'
     connected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Org hierarchy
+    reports_to: str | None = None
+    # Budget tracking
+    budget_monthly_cents: int = 0   # 0 = no limit
+    spent_monthly_cents: int = 0
+
+
+class Task(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: str = ""
+    status: str = "todo"      # todo | in_progress | in_review | done | blocked | cancelled
+    priority: str = "medium"  # low | medium | high | critical
+    assignee: str | None = None
+    created_by: str
+    thread: str = "general"
+    parent_id: str | None = None
+    labels: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = None
+
+
+class CostEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    agent_name: str
+    provider: str = "anthropic"
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_cents: int = 0
+    task_id: str | None = None
+    thread: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ActivityEntry(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    actor_type: str = "system"  # system | agent | user
+    actor_id: str | None = None
+    action: str
+    entity_type: str | None = None  # agent | task | message | approval
+    entity_id: str | None = None
+    details: dict = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Approval(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: str                        # task.execute | budget.exceed | agent.hire | custom
+    requested_by: str
+    status: str = "pending"          # pending | approved | rejected | cancelled
+    payload: dict = Field(default_factory=dict)
+    decision_note: str | None = None
+    decided_by: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    decided_at: datetime | None = None
 
 
 class ContentBlock(BaseModel):

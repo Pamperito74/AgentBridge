@@ -8,6 +8,10 @@ from .auth import router as auth_router
 from .events import router as events_router
 from .admin import router as admin_router
 from .ws import router as ws_router
+from .tasks import router as tasks_router
+from .costs import router as costs_router
+from .approvals import router as approvals_router
+from .activity import router as activity_router
 
 router = APIRouter()
 
@@ -18,3 +22,7 @@ router.include_router(auth_router)
 router.include_router(events_router)
 router.include_router(admin_router)
 router.include_router(ws_router)
+router.include_router(tasks_router)
+router.include_router(costs_router)
+router.include_router(approvals_router)
+router.include_router(activity_router)

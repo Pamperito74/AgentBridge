@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from .models import Agent, Artifact, ContentBlock, Message, Thread, ThreadSummary
+from .models import Agent, Approval, Artifact, ActivityEntry, ContentBlock, CostEvent, Message, Task, Thread, ThreadSummary
 
 DB_DIR = Path.home() / ".agentbridge"
 DB_PATH = DB_DIR / "messages.db"
@@ -134,6 +134,54 @@ class MessageStore:
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (agent_name, key)
                 );
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    status TEXT DEFAULT 'todo',
+                    priority TEXT DEFAULT 'medium',
+                    assignee TEXT,
+                    created_by TEXT NOT NULL,
+                    thread TEXT DEFAULT 'general',
+                    parent_id TEXT,
+                    labels TEXT DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS cost_events (
+                    id TEXT PRIMARY KEY,
+                    agent_name TEXT NOT NULL,
+                    provider TEXT DEFAULT 'anthropic',
+                    model TEXT NOT NULL,
+                    input_tokens INTEGER DEFAULT 0,
+                    output_tokens INTEGER DEFAULT 0,
+                    cost_cents INTEGER DEFAULT 0,
+                    task_id TEXT,
+                    thread TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS activity_log (
+                    id TEXT PRIMARY KEY,
+                    actor_type TEXT DEFAULT 'system',
+                    actor_id TEXT,
+                    action TEXT NOT NULL,
+                    entity_type TEXT,
+                    entity_id TEXT,
+                    details TEXT DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS approvals (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    requested_by TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    payload TEXT DEFAULT '{}',
+                    decision_note TEXT,
+                    decided_by TEXT,
+                    created_at TEXT NOT NULL,
+                    decided_at TEXT
+                );
             """)
             self._conn.commit()
 
@@ -164,6 +212,20 @@ class MessageStore:
                     ON agent_requests(expires_at, status);
                 CREATE INDEX IF NOT EXISTS idx_agent_memory_agent
                     ON agent_memory(agent_name);
+                CREATE INDEX IF NOT EXISTS idx_tasks_status
+                    ON tasks(status);
+                CREATE INDEX IF NOT EXISTS idx_tasks_assignee
+                    ON tasks(assignee);
+                CREATE INDEX IF NOT EXISTS idx_tasks_created_at
+                    ON tasks(created_at);
+                CREATE INDEX IF NOT EXISTS idx_cost_events_agent
+                    ON cost_events(agent_name, created_at);
+                CREATE INDEX IF NOT EXISTS idx_activity_log_created_at
+                    ON activity_log(created_at);
+                CREATE INDEX IF NOT EXISTS idx_activity_log_actor
+                    ON activity_log(actor_id);
+                CREATE INDEX IF NOT EXISTS idx_approvals_status
+                    ON approvals(status);
             """)
             self._conn.commit()
 
@@ -177,6 +239,9 @@ class MessageStore:
                 ("working_on", "ALTER TABLE agents ADD COLUMN working_on TEXT DEFAULT ''"),
                 ("capabilities", "ALTER TABLE agents ADD COLUMN capabilities TEXT DEFAULT '[]'"),
                 ("agent_type", "ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'bot'"),
+                ("reports_to", "ALTER TABLE agents ADD COLUMN reports_to TEXT"),
+                ("budget_monthly_cents", "ALTER TABLE agents ADD COLUMN budget_monthly_cents INTEGER DEFAULT 0"),
+                ("spent_monthly_cents", "ALTER TABLE agents ADD COLUMN spent_monthly_cents INTEGER DEFAULT 0"),
             ]:
                 if col not in agent_cols:
                     self._conn.execute(ddl)
@@ -336,7 +401,7 @@ class MessageStore:
         """Look up a single agent by name. Returns None if not found."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, connected_at, last_seen FROM agents WHERE name = ?",
+                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents WHERE name = ?",
                 (name,)
             ).fetchone()
         if not row:
@@ -345,8 +410,12 @@ class MessageStore:
             name=row[0], role=row[1] or "", status=row[2] or "online",
             working_on=row[3] or "",
             capabilities=json.loads(row[4]) if row[4] else [],
-            connected_at=datetime.fromisoformat(row[5]),
-            last_seen=datetime.fromisoformat(row[6]),
+            agent_type=row[5] or "bot",
+            connected_at=datetime.fromisoformat(row[6]),
+            last_seen=datetime.fromisoformat(row[7]),
+            reports_to=row[8],
+            budget_monthly_cents=row[9] or 0,
+            spent_monthly_cents=row[10] or 0,
         )
 
     async def get_agent_async(self, name: str) -> Agent | None:
@@ -379,7 +448,7 @@ class MessageStore:
             )
             self._conn.commit()
             row = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen FROM agents WHERE name = ?", (name,)
+                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents WHERE name = ?", (name,)
             ).fetchone()
         if not row:
             return None
@@ -388,12 +457,15 @@ class MessageStore:
             capabilities=json.loads(row[4]) if row[4] else [],
             agent_type=row[5] or "bot",
             connected_at=datetime.fromisoformat(row[6]), last_seen=datetime.fromisoformat(row[7]),
+            reports_to=row[8] if len(row) > 8 else None,
+            budget_monthly_cents=row[9] if len(row) > 9 else 0,
+            spent_monthly_cents=row[10] if len(row) > 10 else 0,
         )
 
     def list_agents(self) -> list[Agent]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen FROM agents ORDER BY last_seen DESC"
+                "SELECT name, role, status, working_on, capabilities, agent_type, connected_at, last_seen, reports_to, budget_monthly_cents, spent_monthly_cents FROM agents ORDER BY last_seen DESC"
             ).fetchall()
         return [
             Agent(
@@ -401,6 +473,9 @@ class MessageStore:
                 capabilities=json.loads(r[4]) if r[4] else [],
                 agent_type=r[5] or "bot",
                 connected_at=datetime.fromisoformat(r[6]), last_seen=datetime.fromisoformat(r[7]),
+                reports_to=r[8],
+                budget_monthly_cents=r[9] or 0,
+                spent_monthly_cents=r[10] or 0,
             )
             for r in rows
         ]
@@ -1011,3 +1086,364 @@ class MessageStore:
 
     async def memory_search_async(self, agent_name: str, query: str) -> list[dict]:
         return await self._run_in_thread(self.memory_search, agent_name, query)
+
+    # --- Tasks ---
+
+    def create_task(self, title: str, created_by: str, description: str = "", status: str = "todo",
+                    priority: str = "medium", assignee: str | None = None, thread: str = "general",
+                    parent_id: str | None = None, labels: list[str] | None = None) -> dict:
+        task = Task(title=title, created_by=created_by, description=description, status=status,
+                    priority=priority, assignee=assignee, thread=thread, parent_id=parent_id,
+                    labels=labels or [])
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO tasks (id, title, description, status, priority, assignee, created_by, thread, parent_id, labels, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (task.id, task.title, task.description, task.status, task.priority, task.assignee,
+                 task.created_by, task.thread, task.parent_id, json.dumps(task.labels),
+                 task.created_at.isoformat(), task.updated_at.isoformat(), None),
+            )
+            self._conn.commit()
+        return self._task_row_to_dict(task.id)
+
+    def get_task(self, task_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, title, description, status, priority, assignee, created_by, thread, parent_id, labels, created_at, updated_at, completed_at FROM tasks WHERE id = ?",
+                (task_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return self._task_row_to_dict_from_row(row)
+
+    def _task_row_to_dict(self, task_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, title, description, status, priority, assignee, created_by, thread, parent_id, labels, created_at, updated_at, completed_at FROM tasks WHERE id = ?",
+                (task_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return self._task_row_to_dict_from_row(row)
+
+    def _task_row_to_dict_from_row(self, row) -> dict:
+        return {
+            "id": row[0], "title": row[1], "description": row[2] or "", "status": row[3],
+            "priority": row[4], "assignee": row[5], "created_by": row[6], "thread": row[7] or "general",
+            "parent_id": row[8], "labels": json.loads(row[9]) if row[9] else [],
+            "created_at": row[10], "updated_at": row[11], "completed_at": row[12],
+        }
+
+    def list_tasks(self, status: str | None = None, assignee: str | None = None,
+                   thread: str | None = None, priority: str | None = None, limit: int = 50) -> list[dict]:
+        query = "SELECT id, title, description, status, priority, assignee, created_by, thread, parent_id, labels, created_at, updated_at, completed_at FROM tasks WHERE 1=1"
+        params: list = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if assignee:
+            query += " AND assignee = ?"
+            params.append(assignee)
+        if thread:
+            query += " AND thread = ?"
+            params.append(thread)
+        if priority:
+            query += " AND priority = ?"
+            params.append(priority)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._task_row_to_dict_from_row(r) for r in rows]
+
+    def update_task(self, task_id: str, **kwargs) -> dict | None:
+        allowed = {"title", "description", "status", "priority", "assignee", "thread", "parent_id", "labels"}
+        updates = ["updated_at = ?"]
+        params: list = [datetime.now(timezone.utc).isoformat()]
+        for k, v in kwargs.items():
+            if k in allowed and v is not None:
+                updates.append(f"{k} = ?")
+                params.append(json.dumps(v) if k == "labels" else v)
+        if kwargs.get("status") in ("done",) and "completed_at" not in kwargs:
+            updates.append("completed_at = ?")
+            params.append(datetime.now(timezone.utc).isoformat())
+        params.append(task_id)
+        with self._lock:
+            self._conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?", params)
+            self._conn.commit()
+        return self._task_row_to_dict(task_id)
+
+    def delete_task(self, task_id: str) -> bool:
+        with self._lock:
+            result = self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            self._conn.commit()
+        return result.rowcount > 0
+
+    async def create_task_async(self, *args, **kwargs) -> dict:
+        return await self._run_in_thread(self.create_task, *args, **kwargs)
+
+    async def get_task_async(self, task_id: str) -> dict | None:
+        return await self._run_in_thread(self.get_task, task_id)
+
+    async def list_tasks_async(self, **kwargs) -> list[dict]:
+        return await self._run_in_thread(self.list_tasks, **kwargs)
+
+    async def update_task_async(self, task_id: str, **kwargs) -> dict | None:
+        return await self._run_in_thread(self.update_task, task_id, **kwargs)
+
+    async def delete_task_async(self, task_id: str) -> bool:
+        return await self._run_in_thread(self.delete_task, task_id)
+
+    # --- Cost Events ---
+
+    def record_cost_event(self, agent_name: str, model: str, input_tokens: int = 0,
+                          output_tokens: int = 0, cost_cents: int = 0, provider: str = "anthropic",
+                          task_id: str | None = None, thread: str | None = None) -> dict:
+        ev = CostEvent(agent_name=agent_name, model=model, input_tokens=input_tokens,
+                       output_tokens=output_tokens, cost_cents=cost_cents, provider=provider,
+                       task_id=task_id, thread=thread)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO cost_events (id, agent_name, provider, model, input_tokens, output_tokens, cost_cents, task_id, thread, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ev.id, ev.agent_name, ev.provider, ev.model, ev.input_tokens, ev.output_tokens,
+                 ev.cost_cents, ev.task_id, ev.thread, ev.created_at.isoformat()),
+            )
+            # Update agent's monthly spent
+            self._conn.execute(
+                "UPDATE agents SET spent_monthly_cents = spent_monthly_cents + ? WHERE name = ?",
+                (cost_cents, agent_name)
+            )
+            self._conn.commit()
+        return {
+            "id": ev.id, "agent_name": ev.agent_name, "provider": ev.provider, "model": ev.model,
+            "input_tokens": ev.input_tokens, "output_tokens": ev.output_tokens,
+            "cost_cents": ev.cost_cents, "task_id": ev.task_id, "thread": ev.thread,
+            "created_at": ev.created_at.isoformat(),
+        }
+
+    def list_cost_events(self, agent_name: str | None = None, since: str | None = None,
+                         limit: int = 50) -> list[dict]:
+        query = "SELECT id, agent_name, provider, model, input_tokens, output_tokens, cost_cents, task_id, thread, created_at FROM cost_events WHERE 1=1"
+        params: list = []
+        if agent_name:
+            query += " AND agent_name = ?"
+            params.append(agent_name)
+        if since:
+            query += " AND created_at > ?"
+            params.append(since)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [
+            {"id": r[0], "agent_name": r[1], "provider": r[2], "model": r[3],
+             "input_tokens": r[4], "output_tokens": r[5], "cost_cents": r[6],
+             "task_id": r[7], "thread": r[8], "created_at": r[9]}
+            for r in rows
+        ]
+
+    def cost_summary_for_agent(self, agent_name: str) -> dict:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cost_cents), COUNT(*) FROM cost_events WHERE agent_name = ?",
+                (agent_name,)
+            ).fetchone()
+        return {
+            "agent_name": agent_name,
+            "total_input_tokens": row[0] or 0,
+            "total_output_tokens": row[1] or 0,
+            "total_cost_cents": row[2] or 0,
+            "event_count": row[3] or 0,
+        }
+
+    def cost_summary_platform(self) -> dict:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT SUM(input_tokens), SUM(output_tokens), SUM(cost_cents), COUNT(*) FROM cost_events"
+            ).fetchone()
+            agents_row = self._conn.execute(
+                "SELECT agent_name, SUM(input_tokens), SUM(output_tokens), SUM(cost_cents) FROM cost_events GROUP BY agent_name ORDER BY SUM(cost_cents) DESC"
+            ).fetchall()
+        return {
+            "total_input_tokens": row[0] or 0,
+            "total_output_tokens": row[1] or 0,
+            "total_cost_cents": row[2] or 0,
+            "event_count": row[3] or 0,
+            "by_agent": [
+                {"agent_name": r[0], "input_tokens": r[1] or 0, "output_tokens": r[2] or 0, "cost_cents": r[3] or 0}
+                for r in agents_row
+            ],
+        }
+
+    def set_agent_budget(self, agent_name: str, budget_monthly_cents: int) -> bool:
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE agents SET budget_monthly_cents = ? WHERE name = ?",
+                (budget_monthly_cents, agent_name)
+            )
+            self._conn.commit()
+        return result.rowcount > 0
+
+    async def record_cost_event_async(self, *args, **kwargs) -> dict:
+        return await self._run_in_thread(self.record_cost_event, *args, **kwargs)
+
+    async def list_cost_events_async(self, **kwargs) -> list[dict]:
+        return await self._run_in_thread(self.list_cost_events, **kwargs)
+
+    async def cost_summary_for_agent_async(self, agent_name: str) -> dict:
+        return await self._run_in_thread(self.cost_summary_for_agent, agent_name)
+
+    async def cost_summary_platform_async(self) -> dict:
+        return await self._run_in_thread(self.cost_summary_platform)
+
+    async def set_agent_budget_async(self, agent_name: str, budget_monthly_cents: int) -> bool:
+        return await self._run_in_thread(self.set_agent_budget, agent_name, budget_monthly_cents)
+
+    # --- Activity Log ---
+
+    def log_activity(self, action: str, actor_type: str = "system", actor_id: str | None = None,
+                     entity_type: str | None = None, entity_id: str | None = None,
+                     details: dict | None = None) -> dict:
+        entry = ActivityEntry(action=action, actor_type=actor_type, actor_id=actor_id,
+                              entity_type=entity_type, entity_id=entity_id, details=details or {})
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO activity_log (id, actor_type, actor_id, action, entity_type, entity_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (entry.id, entry.actor_type, entry.actor_id, entry.action, entry.entity_type,
+                 entry.entity_id, json.dumps(entry.details), entry.created_at.isoformat()),
+            )
+            self._conn.commit()
+        return {
+            "id": entry.id, "actor_type": entry.actor_type, "actor_id": entry.actor_id,
+            "action": entry.action, "entity_type": entry.entity_type, "entity_id": entry.entity_id,
+            "details": entry.details, "created_at": entry.created_at.isoformat(),
+        }
+
+    def list_activity(self, actor_id: str | None = None, action: str | None = None,
+                      entity_type: str | None = None, since: str | None = None,
+                      limit: int = 100) -> list[dict]:
+        query = "SELECT id, actor_type, actor_id, action, entity_type, entity_id, details, created_at FROM activity_log WHERE 1=1"
+        params: list = []
+        if actor_id:
+            query += " AND actor_id = ?"
+            params.append(actor_id)
+        if action:
+            query += " AND action = ?"
+            params.append(action)
+        if entity_type:
+            query += " AND entity_type = ?"
+            params.append(entity_type)
+        if since:
+            query += " AND created_at > ?"
+            params.append(since)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [
+            {"id": r[0], "actor_type": r[1], "actor_id": r[2], "action": r[3],
+             "entity_type": r[4], "entity_id": r[5],
+             "details": json.loads(r[6]) if r[6] else {},
+             "created_at": r[7]}
+            for r in rows
+        ]
+
+    async def log_activity_async(self, *args, **kwargs) -> dict:
+        return await self._run_in_thread(self.log_activity, *args, **kwargs)
+
+    async def list_activity_async(self, **kwargs) -> list[dict]:
+        return await self._run_in_thread(self.list_activity, **kwargs)
+
+    # --- Approvals ---
+
+    def create_approval(self, type: str, requested_by: str, payload: dict | None = None) -> dict:
+        approval = Approval(type=type, requested_by=requested_by, payload=payload or {})
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO approvals (id, type, requested_by, status, payload, decision_note, decided_by, created_at, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (approval.id, approval.type, approval.requested_by, approval.status,
+                 json.dumps(approval.payload), None, None, approval.created_at.isoformat(), None),
+            )
+            self._conn.commit()
+        return self._approval_row_to_dict(approval.id)
+
+    def get_approval(self, approval_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, type, requested_by, status, payload, decision_note, decided_by, created_at, decided_at FROM approvals WHERE id = ?",
+                (approval_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return self._approval_from_row(row)
+
+    def _approval_row_to_dict(self, approval_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, type, requested_by, status, payload, decision_note, decided_by, created_at, decided_at FROM approvals WHERE id = ?",
+                (approval_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return self._approval_from_row(row)
+
+    def _approval_from_row(self, row) -> dict:
+        return {
+            "id": row[0], "type": row[1], "requested_by": row[2], "status": row[3],
+            "payload": json.loads(row[4]) if row[4] else {},
+            "decision_note": row[5], "decided_by": row[6],
+            "created_at": row[7], "decided_at": row[8],
+        }
+
+    def list_approvals(self, status: str | None = None, type: str | None = None,
+                       limit: int = 50) -> list[dict]:
+        query = "SELECT id, type, requested_by, status, payload, decision_note, decided_by, created_at, decided_at FROM approvals WHERE 1=1"
+        params: list = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if type:
+            query += " AND type = ?"
+            params.append(type)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._approval_from_row(r) for r in rows]
+
+    def decide_approval(self, approval_id: str, decision: str, decided_by: str,
+                        decision_note: str | None = None) -> dict | None:
+        """Set approval status to 'approved' or 'rejected'."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE approvals SET status = ?, decided_by = ?, decision_note = ?, decided_at = ? WHERE id = ? AND status = 'pending'",
+                (decision, decided_by, decision_note, now, approval_id)
+            )
+            self._conn.commit()
+        if result.rowcount == 0:
+            return None
+        return self._approval_row_to_dict(approval_id)
+
+    def cancel_approval(self, approval_id: str) -> bool:
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE approvals SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
+                (approval_id,)
+            )
+            self._conn.commit()
+        return result.rowcount > 0
+
+    async def create_approval_async(self, *args, **kwargs) -> dict:
+        return await self._run_in_thread(self.create_approval, *args, **kwargs)
+
+    async def get_approval_async(self, approval_id: str) -> dict | None:
+        return await self._run_in_thread(self.get_approval, approval_id)
+
+    async def list_approvals_async(self, **kwargs) -> list[dict]:
+        return await self._run_in_thread(self.list_approvals, **kwargs)
+
+    async def decide_approval_async(self, *args, **kwargs) -> dict | None:
+        return await self._run_in_thread(self.decide_approval, *args, **kwargs)
+
+    async def cancel_approval_async(self, approval_id: str) -> bool:
+        return await self._run_in_thread(self.cancel_approval, approval_id)

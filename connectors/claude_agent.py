@@ -241,6 +241,29 @@ def build_messages(thread_context: list[dict], new_msg: dict) -> list[dict]:
     return merged
 
 
+def report_cost_event(input_tokens: int, output_tokens: int) -> None:
+    """Report token usage to AgentBridge cost tracking (best-effort)."""
+    # Approximate cost in cents: Opus 4.6 = $15/M input, $75/M output
+    cost_cents = round((input_tokens * 15 + output_tokens * 75) / 1_000_000 * 100)
+    try:
+        requests.post(
+            f"{BRIDGE_URL}/cost-events",
+            json={
+                "agent_name": AGENT_NAME,
+                "model": CLAUDE_MODEL,
+                "provider": "anthropic",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_cents": cost_cents,
+            },
+            headers=_headers(),
+            timeout=5,
+        )
+        _debug(f"Reported cost: {input_tokens}in/{output_tokens}out = {cost_cents}¢")
+    except Exception as exc:
+        _debug(f"Cost report failed (non-fatal): {exc}")
+
+
 def call_claude(messages: list[dict], thread: str) -> str:
     """Call Claude API and return the response text."""
     system = SYSTEM_PROMPT + f"\nCurrent channel: #{thread}"
@@ -252,6 +275,13 @@ def call_claude(messages: list[dict], thread: str) -> str:
         messages=messages,
         thinking={"type": "adaptive"},
     )
+
+    # Report usage to AgentBridge cost tracker
+    if response.usage:
+        report_cost_event(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
 
     for block in response.content:
         if block.type == "text":
