@@ -315,7 +315,6 @@ def call_claude(messages: list[dict], thread: str) -> str:
         max_tokens=2048,
         system=system,
         messages=messages,
-        thinking={"type": "adaptive"},
     )
 
     # Report usage to AgentBridge cost tracker
