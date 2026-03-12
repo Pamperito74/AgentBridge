@@ -27,8 +27,9 @@ from .transport.sse import sse_router
 logger = logging.getLogger("agentbridge")
 
 # Kept at module level so tests can monkeypatch `server._auth_token`.
-# main.py reads it via _get_auth_token() which is bound into middleware.
-_auth_token = ""
+# None = not explicitly set, fall back to env var.
+# "" (empty string) = explicitly set to open mode (used by tests via monkeypatch).
+_auth_token: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +97,11 @@ def _setup_logging() -> logging.Logger:
 
 
 def _get_auth_token() -> str:
-    return _auth_token or os.environ.get("AGENTBRIDGE_TOKEN", "")
+    # If _auth_token has been explicitly set (e.g. monkeypatched to "" in tests),
+    # use that value directly — do NOT fall back to env var.
+    if _auth_token is not None:
+        return _auth_token
+    return os.environ.get("AGENTBRIDGE_TOKEN", "")
 
 
 # ---------------------------------------------------------------------------
