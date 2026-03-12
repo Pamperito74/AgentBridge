@@ -279,6 +279,17 @@ class MessageStore:
             ]:
                 if col not in msg_cols:
                     self._conn.execute(ddl)
+            # Google OAuth columns on users table
+            cursor = self._conn.execute("PRAGMA table_info(users)")
+            user_cols = {row[1] for row in cursor.fetchall()}
+            for col, ddl in [
+                ("google_id", "ALTER TABLE users ADD COLUMN google_id TEXT"),
+                ("google_email", "ALTER TABLE users ADD COLUMN google_email TEXT"),
+                ("avatar_url", "ALTER TABLE users ADD COLUMN avatar_url TEXT"),
+            ]:
+                if col not in user_cols:
+                    self._conn.execute(ddl)
+
             # Create agent_requests table if missing (migration-safe)
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS agent_requests (
@@ -603,6 +614,59 @@ class MessageStore:
             self._conn.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
             self._conn.commit()
         return cursor.rowcount > 0
+
+    def find_or_create_google_user(self, google_id: str, email: str, display_name: str, avatar_url: str) -> dict:
+        """Find an existing user by google_id (or email) and update their profile,
+        or create a new member account. Returns user dict."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            # 1. Match by google_id
+            row = self._conn.execute(
+                "SELECT id, username, display_name, role, created_at, updated_at FROM users WHERE google_id = ?",
+                (google_id,),
+            ).fetchone()
+            if row:
+                self._conn.execute(
+                    "UPDATE users SET google_email = ?, avatar_url = ?, display_name = ?, updated_at = ? WHERE id = ?",
+                    (email, avatar_url, display_name, now, row[0]),
+                )
+                self._conn.commit()
+                return {"id": row[0], "username": row[1], "display_name": display_name, "role": row[3],
+                        "avatar_url": avatar_url, "created_at": row[4], "updated_at": now}
+
+            # 2. Match by email (user signed up with password first)
+            row = self._conn.execute(
+                "SELECT id, username, display_name, role, created_at, updated_at FROM users WHERE google_email = ? OR username = ?",
+                (email, email),
+            ).fetchone()
+            if row:
+                self._conn.execute(
+                    "UPDATE users SET google_id = ?, google_email = ?, avatar_url = ?, display_name = ?, updated_at = ? WHERE id = ?",
+                    (google_id, email, avatar_url, display_name, now, row[0]),
+                )
+                self._conn.commit()
+                return {"id": row[0], "username": row[1], "display_name": display_name, "role": row[3],
+                        "avatar_url": avatar_url, "created_at": row[4], "updated_at": now}
+
+            # 3. Create new user — derive a unique username from email
+            base = email.split("@")[0].lower()
+            import re as _re
+            base = _re.sub(r"[^\w.-]", "_", base)[:64]
+            username = base
+            suffix = 1
+            while self._conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+                username = f"{base}_{suffix}"
+                suffix += 1
+
+            user_id = str(uuid.uuid4())
+            self._conn.execute(
+                "INSERT INTO users (id, username, password_hash, display_name, role, google_id, google_email, avatar_url, created_at, updated_at) "
+                "VALUES (?, ?, '', ?, 'member', ?, ?, ?, ?, ?)",
+                (user_id, username, display_name, google_id, email, avatar_url, now, now),
+            )
+            self._conn.commit()
+        return {"id": user_id, "username": username, "display_name": display_name, "role": "member",
+                "avatar_url": avatar_url, "created_at": now, "updated_at": now}
 
     # --- Sessions ---
 

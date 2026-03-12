@@ -3120,6 +3120,18 @@ async function loginWithCredentials(username, password, remember) {
   return d.user;
 }
 
+async function loginWithSessionToken(token, remember) {
+  // Used after Google OAuth redirect — token is already a valid session token
+  try {
+    const me = await fetch(API + '/auth/me', { headers: { 'X-AgentBridge-Token': token } });
+    if (!me.ok) return false;
+    currentUser = await me.json();
+    if (!currentUser?.id) return false;
+    saveToken(token, remember);
+    return true;
+  } catch { return false; }
+}
+
 async function validateToken(token) {
   try {
     const r = await fetch(API + '/agents', {
@@ -3539,6 +3551,28 @@ async function initAuth() {
     const card = loginScreen.querySelector('.login-card');
     if (card) trapFocus(card);
     document.getElementById('setup-username').focus();
+  }
+
+  // ── Google SSO button ─────────────────────────────────────────────
+  const googleBtn = document.getElementById('login-google-btn');
+  try {
+    const gcfg = await fetch(API + '/auth/google/config').then(r => r.json());
+    if (gcfg.enabled) {
+      googleBtn.disabled = false;
+      googleBtn.title = 'Sign in with Google';
+      googleBtn.querySelector('.login-google-badge')?.remove();
+      googleBtn.addEventListener('click', () => { window.location.href = API + '/auth/google'; });
+    }
+  } catch {}
+
+  // ── Handle OAuth redirect — token in URL hash ──────────────────────
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const hashToken = hashParams.get('token');
+  if (hashToken) {
+    // Clear the hash so the token doesn't linger in the address bar
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    const ok = await loginWithSessionToken(hashToken, true);
+    if (ok) { showDashboard(); return; }
   }
 
   // ── Startup auth flow ─────────────────────────────────────────────

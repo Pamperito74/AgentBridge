@@ -3,14 +3,32 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import secrets
+import urllib.parse
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from ...deps import get_store
 
 logger = logging.getLogger("agentbridge")
+
+# ---------------------------------------------------------------------------
+# Google OAuth2 config
+# ---------------------------------------------------------------------------
+
+_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+_GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+# In-memory CSRF state store (good enough for single-process; TTL not needed — short-lived)
+_oauth_states: set[str] = set()
 
 router = APIRouter()
 
@@ -175,3 +193,101 @@ async def delete_user(user_id: str, request: Request):
     deleted = await asyncio.to_thread(get_store().delete_user, user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="User not found")
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth2 SSO
+# ---------------------------------------------------------------------------
+
+
+@router.get("/auth/google/config")
+async def google_config():
+    """Tell the dashboard whether Google SSO is configured."""
+    return {"enabled": bool(_GOOGLE_CLIENT_ID and _GOOGLE_CLIENT_SECRET)}
+
+
+@router.get("/auth/google")
+async def google_login(request: Request):
+    """Redirect the browser to Google's OAuth2 consent screen."""
+    if not _GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Google SSO is not configured (GOOGLE_CLIENT_ID missing)")
+
+    state = secrets.token_urlsafe(24)
+    _oauth_states.add(state)
+
+    redirect_uri = _get_redirect_uri(request)
+    params = urllib.parse.urlencode({
+        "client_id": _GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    })
+    return RedirectResponse(url=f"{_GOOGLE_AUTH_URL}?{params}")
+
+
+@router.get("/auth/google/callback")
+async def google_callback(code: str | None = None, state: str | None = None, error: str | None = None, request: Request = None):
+    """Google redirects here after user grants/denies access."""
+    if error:
+        return RedirectResponse(url="/ui?error=google_denied")
+
+    if not code or not state or state not in _oauth_states:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    _oauth_states.discard(state)
+
+    redirect_uri = _get_redirect_uri(request)
+
+    # Exchange authorization code for tokens
+    async with httpx.AsyncClient(timeout=10) as client:
+        token_resp = await client.post(_GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": _GOOGLE_CLIENT_ID,
+            "client_secret": _GOOGLE_CLIENT_SECRET,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        })
+        if token_resp.status_code != 200:
+            logger.error("Google token exchange failed: %s", token_resp.text)
+            raise HTTPException(status_code=502, detail="Google token exchange failed")
+        token_data = token_resp.json()
+
+        # Fetch user profile
+        userinfo_resp = await client.get(
+            _GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {token_data['access_token']}"},
+        )
+        if userinfo_resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Failed to fetch Google user info")
+        profile = userinfo_resp.json()
+
+    google_id = profile.get("sub", "")
+    email = profile.get("email", "")
+    name = profile.get("name", email.split("@")[0])
+    avatar = profile.get("picture", "")
+
+    if not google_id or not email:
+        raise HTTPException(status_code=400, detail="Google profile missing required fields")
+
+    # Upsert user
+    user = await asyncio.to_thread(
+        get_store().find_or_create_google_user, google_id, email, name, avatar
+    )
+
+    # Create session
+    session_token = await asyncio.to_thread(get_store().create_session, user["id"])
+    logger.info("Google SSO login: %s (%s)", user["username"], email)
+
+    # Redirect to dashboard with token in URL hash (never logged by server)
+    return RedirectResponse(url=f"/ui#token={session_token}")
+
+
+def _get_redirect_uri(request: Request) -> str:
+    """Build the OAuth callback URI from env or from the incoming request."""
+    env_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
+    if env_uri:
+        return env_uri
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/auth/google/callback"
