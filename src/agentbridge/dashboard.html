@@ -3512,6 +3512,10 @@ function pushHistory(content) {
   historyIdx = -1;
 }
 
+// Tracks optimistic messages in flight: localId -> {sender,content,thread,ts}
+// Used to suppress SSE echo before the POST response resolves
+const _pendingSends = new Map();
+
 async function sendMessage() {
   const ta = document.getElementById('msg-input');
   const content = ta.value.trim();
@@ -3537,6 +3541,9 @@ async function sendMessage() {
     timestamp: new Date().toISOString(),
     _pending: isRequest,
   };
+  // Register before the POST so SSE echo is caught even if it arrives
+  // before await resolves (race condition fix)
+  _pendingSends.set(localId, { sender, content, thread, ts: Date.now() });
   try {
     ta.value = '';
     ta.style.height = 'auto';
@@ -3546,8 +3553,9 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id: correlation_id || undefined }),
     });
-    // Pre-register the server-assigned ID so the SSE echo is silently deduplicated
+    // Belt+suspenders: also register server ID for any late SSE delivery
     if (serverMsg && serverMsg.id) renderedIds.add(serverMsg.id);
+    _pendingSends.delete(localId);
   } catch (err) {
     // Mark the local message as send-error (persistent, with retry)
     const bubbles = document.querySelectorAll(`[data-correlation="${localId}"], .msg-bubble.pending`);
@@ -3874,6 +3882,15 @@ function connectSSE() {
 
   es.addEventListener('message', e => {
     const msg = JSON.parse(e.data);
+    // Suppress SSE echo of our own optimistic messages (race-condition-safe)
+    for (const [lid, p] of _pendingSends.entries()) {
+      if (p.sender === msg.sender && p.content === msg.content &&
+          p.thread === msg.thread && (Date.now() - p.ts) < 5000) {
+        renderedIds.add(msg.id); // register real ID for future dedup
+        _pendingSends.delete(lid);
+        return;
+      }
+    }
     appendMessage(msg);
   });
 
