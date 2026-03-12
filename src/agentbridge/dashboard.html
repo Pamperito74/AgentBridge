@@ -3541,11 +3541,13 @@ async function sendMessage() {
     ta.value = '';
     ta.style.height = 'auto';
     appendMessage(localMsg);
-    await api('/messages', {
+    const serverMsg = await api('/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id: correlation_id || undefined }),
     });
+    // Pre-register the server-assigned ID so the SSE echo is silently deduplicated
+    if (serverMsg && serverMsg.id) renderedIds.add(serverMsg.id);
   } catch (err) {
     // Mark the local message as send-error (persistent, with retry)
     const bubbles = document.querySelectorAll(`[data-correlation="${localId}"], .msg-bubble.pending`);
