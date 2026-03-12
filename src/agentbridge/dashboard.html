@@ -61,7 +61,7 @@
     --border: #e1d8cb;
     --border-light: #d5c9b7;
     --fg: #151821;
-    --fg-dim: #6a706f;
+    --fg-dim: #5a5f5e;
     --fg-mid: #4d5258;
     --accent: #149a86;
     --accent-dim: #0f7e6f;
@@ -76,6 +76,7 @@
     --red-dim: rgba(204,77,77,0.10);
     --blue: #2f6fed;
     --blue-dim: rgba(47,111,237,0.10);
+    --accent-text: #1a7f37;
   }
 
   /* Theme toggle */
@@ -1505,6 +1506,304 @@
     margin-right: 4px;
   }
   .dm-back-btn:hover { background: var(--bg-hover); color: var(--fg); }
+
+  /* ── P0: Focus-visible styles ── */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── P0: Contrast fix for --fs-xxs ── */
+  :root {
+    --fs-xxs: max(11px, calc(var(--font-size) * 0.71));
+  }
+
+  /* ── P1: Streaming cursor ── */
+  .stream-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .stream-stall-warning {
+    margin-top: 8px;
+    font-size: var(--fs-xs);
+    color: var(--yellow);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .stall-cancel-btn, .retry-btn, .retry-send-btn {
+    background: var(--bg-elevated, var(--bg-elev));
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-mid);
+    font-size: var(--fs-xxs);
+    padding: 2px 7px;
+    cursor: pointer;
+  }
+  .stall-cancel-btn:hover, .retry-btn:hover, .retry-send-btn:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+  }
+  .stream-error-footer {
+    margin-top: 8px;
+    font-size: var(--fs-xs);
+    color: var(--red);
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+  }
+
+  /* ── P1: Disconnect banner ── */
+  .disconnect-banner {
+    background: rgba(248,81,73,0.08);
+    border-left: 3px solid var(--red, #f85149);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .disconnect-banner button {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg-mid);
+    font-size: var(--fs-xs);
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .disconnect-banner button:hover { background: var(--bg-hover); color: var(--fg); }
+  .reconnect-success-banner {
+    background: rgba(59,224,164,0.08);
+    border-left: 3px solid var(--green, #3be0a4);
+    padding: 10px 16px;
+    font-size: 13px;
+    flex-shrink: 0;
+    color: var(--green);
+  }
+
+  /* ── P1: Send error ── */
+  .msg-bubble.send-error {
+    border: 1px solid var(--red);
+    opacity: 0.85;
+  }
+  .send-error-label {
+    margin-top: 6px;
+    font-size: var(--fs-xs);
+    color: var(--red);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── P1: A2A messages ── */
+  .msg-row.a2a {
+    opacity: 0.72;
+  }
+  .msg-row.a2a .msg-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+  }
+  .msg-row.a2a {
+    padding-left: 16px;
+  }
+  .auto-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--bg-elevated, var(--bg-elev));
+    color: var(--fg-dim);
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  /* ── P2: Agent filter input ── */
+  .agent-filter-input {
+    width: calc(100% - 28px);
+    margin: 4px 14px 6px;
+    display: block;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    padding: 5px 8px;
+    font-size: var(--fs-xs);
+    font-family: inherit;
+    outline: none;
+  }
+  .agent-filter-input:focus { border-color: var(--accent); }
+  .agent-group-header {
+    font-size: var(--fs-xxs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-dim);
+    padding: 6px 14px 2px;
+  }
+  .agent-group-offline-toggle {
+    padding: 4px 14px;
+    font-size: var(--fs-xxs);
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+  }
+  .agent-group-offline-toggle:hover { text-decoration: underline; }
+  .agent-item { min-height: 36px; padding: 8px 10px; }
+
+  /* ── P2: Mention grouping ── */
+  .mention-group-header {
+    padding: 4px 12px 2px;
+    font-size: var(--fs-xxs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-dim);
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+  }
+  .mention-option.agent-type { border-left: 3px solid var(--accent); }
+  .mention-option.user-type  { border-left: 3px solid transparent; }
+
+  /* ── P2: ArtifactCard ── */
+  .artifact-card {
+    background: var(--bg-primary, var(--bg));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin: 6px 0;
+    overflow: hidden;
+  }
+  .artifact-header {
+    background: var(--bg-elevated, var(--bg-elev));
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+  .artifact-lang { color: var(--accent); font-family: var(--font-mono, monospace); }
+  .artifact-filename { color: var(--fg-dim); flex: 1; }
+  .artifact-actions { display: flex; gap: 6px; margin-left: auto; }
+  .artifact-actions button {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-mid);
+    font-size: 11px;
+    padding: 2px 7px;
+    cursor: pointer;
+  }
+  .artifact-actions button:hover { background: var(--bg-hover); color: var(--fg); }
+  .artifact-body {
+    padding: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 0;
+    white-space: pre;
+  }
+  .artifact-more {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    border-top: 1px solid var(--border);
+  }
+  .artifact-more:hover { background: var(--bg-elevated, var(--bg-elev)); }
+
+  /* ── P2: Composer auto-grow ── */
+  #msg-input {
+    min-height: 40px;
+    max-height: 200px;
+    resize: none;
+    overflow-y: auto;
+  }
+
+  /* ── P2: Paste prompt ── */
+  .paste-prompt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: var(--fs-xs);
+    margin-bottom: 4px;
+  }
+  .paste-prompt span { flex: 1; color: var(--fg-mid); }
+  .paste-prompt button {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg);
+    font-size: var(--fs-xs);
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .paste-prompt button:hover { background: var(--bg-hover); }
+
+  /* ── P2: Advanced controls toggle ── */
+  .advanced-toggle {
+    font-size: var(--fs-xxs);
+    color: var(--fg-dim);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    user-select: none;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .advanced-toggle:hover { color: var(--fg); background: var(--bg-hover); }
+  .advanced-controls { display: none; }
+  .advanced-controls.visible { display: contents; }
+
+  /* ── Empty state improvements ── */
+  .empty-state .empty-icon { font-size: 2.5em; opacity: 0.5; margin-bottom: 4px; }
+  .empty-state .empty-title { font-size: var(--fs-md); font-weight: 600; color: var(--fg-mid); }
+  .empty-state .empty-body { font-size: var(--fs-sm); color: var(--fg-dim); text-align: center; line-height: 1.6; max-width: 340px; }
+  .empty-cmd {
+    display: inline-block;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-family: ui-monospace, monospace;
+    font-size: var(--fs-xs);
+    color: var(--fg);
+    margin: 4px 0;
+  }
+  .empty-copy-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-mid);
+    font-size: var(--fs-xs);
+    padding: 2px 8px;
+    cursor: pointer;
+    margin-left: 6px;
+  }
+  .empty-copy-btn:hover { background: var(--bg-hover); color: var(--fg); }
+
+  /* ── Keyboard-nav on interactive divs ── */
+  .agent-item[tabindex], .thread-item[tabindex], .dm-item[tabindex],
+  .user-menu-item[tabindex], .mention-option[tabindex] {
+    /* already have cursor:pointer, just ensure outline shows on focus */
+  }
 </style>
 </head>
 <body>
@@ -1586,11 +1885,11 @@
       <span class="settings-title">Settings</span>
       <button class="settings-close" id="settings-close">×</button>
     </div>
-    <div class="settings-tabs">
-      <div class="settings-tab active" data-tab="general">General</div>
-      <div class="settings-tab" id="users-tab-btn" data-tab="users" style="display:none">Users</div>
-      <div class="settings-tab" id="tools-tab-btn" data-tab="tools" style="display:none">Tools</div>
-      <div class="settings-tab" id="debug-tab-btn" data-tab="debug" style="display:none">Debug</div>
+    <div class="settings-tabs" role="tablist">
+      <div class="settings-tab active" data-tab="general" tabindex="0" role="tab" aria-selected="true">General</div>
+      <div class="settings-tab" id="users-tab-btn" data-tab="users" style="display:none" tabindex="0" role="tab" aria-selected="false">Users</div>
+      <div class="settings-tab" id="tools-tab-btn" data-tab="tools" style="display:none" tabindex="0" role="tab" aria-selected="false">Tools</div>
+      <div class="settings-tab" id="debug-tab-btn" data-tab="debug" style="display:none" tabindex="0" role="tab" aria-selected="false">Debug</div>
     </div>
     <div class="settings-body">
       <!-- General tab -->
@@ -1793,13 +2092,13 @@
         </div>
       </div>
       <div class="user-divider"></div>
-      <div class="user-menu-item">
+      <div class="user-menu-item" tabindex="0" role="button">
         <span class="ico">
           <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M4 20c1.5-4 14.5-4 16 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
         <span>Profile</span>
       </div>
-      <div class="user-menu-item" id="settings-menu-item">
+      <div class="user-menu-item" id="settings-menu-item" tabindex="0" role="button">
         <span class="ico">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.5"/><path d="M19.4 15a1 1 0 00.2 1.1l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1 1 0 00-1.1-.2 1 1 0 00-.6.9V20a2 2 0 11-4 0v-.1a1 1 0 00-.6-.9 1 1 0 00-1.1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1 1 0 00.2-1.1 1 1 0 00-.9-.6H4a2 2 0 110-4h.1a1 1 0 00.9-.6 1 1 0 00-.2-1.1l-.1-.1a2 2 0 112.8-2.8l.1.1a1 1 0 001.1.2 1 1 0 00.6-.9V4a2 2 0 114 0v.1a1 1 0 00.6.9 1 1 0 001.1-.2l.1-.1a2 2 0 112.8 2.8l-.1.1a1 1 0 00-.2 1.1 1 1 0 00.9.6H20a2 2 0 110 4h-.1a1 1 0 00-.9.6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
@@ -1811,13 +2110,13 @@
         <input type="text" id="sender-input" value="dashboard" placeholder="Your name">
       </div>
       <div class="user-divider"></div>
-      <div class="user-menu-item">
+      <div class="user-menu-item" tabindex="0" role="button">
         <span class="ico">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 4h2a2 2 0 012 2v12a2 2 0 01-2 2h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 17l5-5-5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 12H4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
         <span>Logout</span>
       </div>
-      <div class="user-menu-item" id="clear-board-btn">
+      <div class="user-menu-item" id="clear-board-btn" tabindex="0" role="button">
         <span class="ico">
           <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 6V4h8v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7 6l1 14h8l1-14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
@@ -1849,7 +2148,7 @@
         Inbox only
       </label>
     </div>
-    <div class="messages" id="messages">
+    <div class="messages" id="messages" aria-live="polite" aria-atomic="false">
       <div class="empty-state">
         <div class="icon">◎</div>
         <p>No messages yet. Agents will appear here when they communicate.</p>
@@ -1869,18 +2168,21 @@
         <select id="recipient-select"><option value="">Everyone</option></select>
         <label style="margin-left:4px">#</label>
         <select id="thread-select"><option value="general">general</option></select>
-        <label style="margin-left:4px">Type</label>
-        <select id="type-select">
-          <option value="chat">chat</option>
-          <option value="request">request</option>
-          <option value="status">status</option>
-          <option value="alert">alert</option>
-        </select>
+        <button class="advanced-toggle" id="advanced-toggle" type="button" title="Show advanced options">Advanced ▸</button>
+        <span class="advanced-controls" id="advanced-controls">
+          <label style="margin-left:4px">Type</label>
+          <select id="type-select">
+            <option value="chat">chat</option>
+            <option value="request">request</option>
+            <option value="status">status</option>
+            <option value="alert">alert</option>
+          </select>
+        </span>
       </div>
       <div class="compose-row">
         <div class="compose-input-wrap">
           <textarea id="msg-input" placeholder="Type a message… (@ to mention, Enter to send, Shift+Enter for newline)" rows="1"></textarea>
-          <div class="mention-popup" id="mention-popup"></div>
+          <div class="mention-popup" id="mention-popup" role="listbox" aria-label="Mention someone"></div>
         </div>
         <button class="send-btn" id="send-btn">Send</button>
       </div>
@@ -1888,7 +2190,7 @@
   </div>
 </main>
 
-<div class="ab-toast" id="ab-toast"></div>
+<div class="ab-toast" id="ab-toast" aria-live="assertive" aria-atomic="true"></div>
 
 <script>
 const fontHref = 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap';
@@ -1897,6 +2199,61 @@ fontLink.rel = 'stylesheet';
 fontLink.href = fontHref;
 document.head.appendChild(fontLink);
 const API = window.location.origin;
+
+// ── Focus trap ────────────────────────────────────────────────────────
+function trapFocus(el) {
+  const focusable = el.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])');
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  el._trapHandler = e => {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last && last.focus(); } }
+    else { if (document.activeElement === last) { e.preventDefault(); first && first.focus(); } }
+  };
+  el.addEventListener('keydown', el._trapHandler);
+  first && first.focus();
+}
+function releaseFocus(el) {
+  if (el._trapHandler) el.removeEventListener('keydown', el._trapHandler);
+}
+
+// ── Keyboard activation for interactive divs ───────────────────────────
+function addKeyActivation(el) {
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); }
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[tabindex="0"][role="button"], [tabindex="0"][role="option"]').forEach(addKeyActivation);
+});
+
+// ── Browser tab unread count ──────────────────────────────────────────
+let unreadCount = 0;
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    unreadCount = 0;
+    document.title = 'AgentBridge';
+  }
+});
+function incrementUnread() {
+  if (document.hidden) {
+    unreadCount++;
+    document.title = `(${unreadCount}) AgentBridge`;
+  }
+}
+
+// ── Streaming state ───────────────────────────────────────────────────
+const streamingBubbles = new Map(); // correlationId -> { bubble, stallTimer, stalled }
+function cancelStream(correlationId) {
+  const state = streamingBubbles.get(correlationId);
+  if (!state) return;
+  clearTimeout(state.stallTimer);
+  streamingBubbles.delete(correlationId);
+  if (state.bubble) {
+    const cursor = state.bubble.querySelector('.stream-cursor');
+    if (cursor) cursor.remove();
+    state.bubble.style.borderLeft = '';
+  }
+}
 
 // ── Toast ─────────────────────────────────────────────────────────────
 let _toastTimer = null;
@@ -1998,6 +2355,8 @@ async function initAuth() {
   const logoutBtn = document.getElementById('logout-btn');
 
   function showDashboard() {
+    const card = loginScreen.querySelector('.login-card');
+    if (card) releaseFocus(card);
     loginScreen.classList.remove('visible');
     logoutBtn.style.display = '';
     if (currentUser?.id) {
@@ -2070,7 +2429,7 @@ async function initAuth() {
   });
 
   // Settings modal
-  function openSettings(tab = 'general') {
+  openSettings = function(tab = 'general') {
     const overlay = document.getElementById('settings-overlay');
     overlay.classList.add('visible');
     switchSettingsTab(tab);
@@ -2078,12 +2437,21 @@ async function initAuth() {
     document.getElementById('sender-input-settings').value = document.getElementById('sender-input').value;
     document.getElementById('identity-status').textContent = '';
     document.getElementById('pw-status').textContent = '';
-  }
-  function closeSettings() {
-    document.getElementById('settings-overlay').classList.remove('visible');
-  }
+    const modal = overlay.querySelector('.settings-modal');
+    if (modal) trapFocus(modal);
+  };
+  closeSettings = function() {
+    const overlay = document.getElementById('settings-overlay');
+    const modal = overlay.querySelector('.settings-modal');
+    if (modal) releaseFocus(modal);
+    overlay.classList.remove('visible');
+  };
   function switchSettingsTab(tab) {
-    document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.settings-tab').forEach(t => {
+      const isActive = t.dataset.tab === tab;
+      t.classList.toggle('active', isActive);
+      t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
     document.getElementById('settings-tab-general').style.display = tab === 'general' ? '' : 'none';
     document.getElementById('settings-tab-users').style.display = tab === 'users' ? '' : 'none';
     document.getElementById('settings-tab-tools').style.display = tab === 'tools' ? '' : 'none';
@@ -2098,6 +2466,7 @@ async function initAuth() {
   });
   document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => switchSettingsTab(tab.dataset.tab));
+    tab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchSettingsTab(tab.dataset.tab); } });
   });
   document.getElementById('settings-menu-item').addEventListener('click', () => {
     document.getElementById('user-menu').classList.remove('visible');
@@ -2369,6 +2738,8 @@ async function initAuth() {
     setupForm.style.display = '';
     loginTitle.textContent = 'Welcome! Create your admin account';
     loginScreen.classList.add('visible');
+    const card = loginScreen.querySelector('.login-card');
+    if (card) trapFocus(card);
     document.getElementById('setup-username').focus();
   }
 
@@ -2388,9 +2759,13 @@ async function initAuth() {
         loginTokenForm.style.display = '';
         loginTitle.textContent = 'Enter your access token to continue';
         loginScreen.classList.add('visible');
+        const card = loginScreen.querySelector('.login-card');
+        if (card) trapFocus(card);
         loginTokenInput.focus();
       } else {
         loginScreen.classList.add('visible');
+        const card = loginScreen.querySelector('.login-card');
+        if (card) trapFocus(card);
         usernameInput.focus();
       }
     }
@@ -2401,13 +2776,17 @@ async function initAuth() {
     loginTokenForm.style.display = '';
     loginTitle.textContent = 'Enter your access token to continue';
     loginScreen.classList.add('visible');
+    { const card = loginScreen.querySelector('.login-card'); if (card) trapFocus(card); }
     loginTokenInput.focus();
   } else {
     // 'users' mode
     loginScreen.classList.add('visible');
+    { const card = loginScreen.querySelector('.login-card'); if (card) trapFocus(card); }
     usernameInput.focus();
   }
 }
+let openSettings = () => {}; // will be assigned inside initAuth
+let closeSettings = () => {}; // will be assigned inside initAuth
 let currentThread = null;
 let currentDmAgent = null;   // string | null — agent name of open DM conversation
 let dmUnread = {};           // { agentName: unreadCount }
@@ -2597,39 +2976,101 @@ function scheduleRegister() {
 }
 
 // ── Render sidebar agents
+let agentFilterQuery = '';
+let offlineGroupCollapsed = true;
+
+function filterAgents(query) {
+  agentFilterQuery = query.toLowerCase();
+  renderAgents();
+}
+
+function agentItemHtml(a) {
+  const color = agentColor(a.name);
+  const caps = (a.capabilities || []).slice(0, 2).join(', ');
+  const icon = a.agent_type === 'human' ? '👤' : '🤖';
+  const hbStatus = heartbeatStatus(a);
+  const hbLabel = lastSeenLabel(a);
+  return `<div class="agent-item" data-name="${esc(a.name)}" tabindex="0" role="button" aria-label="Open DM with ${esc(a.name)}">
+    <div class="avatar" style="background:${color}22; color:${color}">
+      ${esc(initials(a.name))}
+      <div class="avatar-badge ${hbStatus}" title="${esc(hbLabel)}"></div>
+    </div>
+    <div class="agent-info">
+      <div class="agent-name">${icon} ${esc(a.name)}</div>
+      <div class="agent-sub">${a.working_on ? esc(a.working_on) : esc(a.role || '')}</div>
+      ${caps ? `<div class="agent-cap">${esc(caps)}</div>` : ''}
+    </div>
+    <button class="kick-btn" data-name="${esc(a.name)}" title="Kick agent">✕</button>
+  </div>`;
+}
+
 function renderAgents() {
   const el = document.getElementById('agent-list');
-  document.getElementById('agent-sidebar-count').textContent = agents.length;
-  document.getElementById('agent-count-num').textContent = agents.length;
+  const onlineCount = agents.filter(a => heartbeatStatus(a) === 'online').length;
+  document.getElementById('agent-sidebar-count').textContent = `${agents.length} — ${onlineCount} online`;
+  document.getElementById('agent-count-num').textContent = onlineCount;
   if (!agents.length) {
     el.innerHTML = '<div class="muted-row">No agents online</div>';
     updateRecipientSelect();
     return;
   }
-  el.innerHTML = agents.map(a => {
-    const color = agentColor(a.name);
-    const caps = (a.capabilities || []).slice(0, 2).join(', ');
-    const icon = a.agent_type === 'human' ? '👤' : '🤖';
-    const hbStatus = heartbeatStatus(a);
-    const hbLabel = lastSeenLabel(a);
-    return `<div class="agent-item" data-name="${esc(a.name)}">
-      <div class="avatar" style="background:${color}22; color:${color}">
-        ${esc(initials(a.name))}
-        <div class="avatar-badge ${hbStatus}" title="${esc(hbLabel)}"></div>
-      </div>
-      <div class="agent-info">
-        <div class="agent-name">${icon} ${esc(a.name)}</div>
-        <div class="agent-sub">${a.working_on ? esc(a.working_on) : esc(a.role || '')}</div>
-        ${caps ? `<div class="agent-cap">${esc(caps)}</div>` : ''}
-      </div>
-      <button class="kick-btn" data-name="${esc(a.name)}" title="Kick agent">✕</button>
-    </div>`;
-  }).join('');
+
+  let filtered = agents;
+  if (agentFilterQuery) {
+    filtered = agents.filter(a => a.name.toLowerCase().includes(agentFilterQuery));
+  }
+
+  const online = filtered.filter(a => heartbeatStatus(a) === 'online');
+  const stale  = filtered.filter(a => heartbeatStatus(a) === 'stale');
+  const offline = filtered.filter(a => heartbeatStatus(a) === 'offline');
+
+  let html = '';
+  // Filter input when >10 agents
+  if (agents.length > 10) {
+    html += `<input class="agent-filter-input" placeholder="Filter agents…" oninput="filterAgents(this.value)" value="${esc(agentFilterQuery)}" aria-label="Filter agents" />`;
+  }
+  if (online.length) {
+    html += `<div class="agent-group-header">Online</div>`;
+    html += online.map(agentItemHtml).join('');
+  }
+  if (stale.length) {
+    html += `<div class="agent-group-header">Idle</div>`;
+    html += stale.map(agentItemHtml).join('');
+  }
+  if (offline.length) {
+    const showToggle = offline.length > 5;
+    html += `<div class="agent-group-header">Offline (${offline.length})`;
+    if (showToggle) {
+      html += ` <span class="agent-group-offline-toggle" id="offline-group-toggle" tabindex="0" role="button">${offlineGroupCollapsed ? '[show]' : '[hide]'}</span>`;
+    }
+    html += `</div>`;
+    if (!showToggle || !offlineGroupCollapsed) {
+      html += offline.map(agentItemHtml).join('');
+    }
+  }
+  if (!filtered.length) {
+    html += '<div class="muted-row">No agents match filter</div>';
+  }
+
+  el.innerHTML = html;
+
+  const toggleBtn = el.querySelector('#offline-group-toggle');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => { offlineGroupCollapsed = !offlineGroupCollapsed; renderAgents(); });
+    toggleBtn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); offlineGroupCollapsed = !offlineGroupCollapsed; renderAgents(); } });
+  }
+
   el.querySelectorAll('.agent-item').forEach(item => {
-    item.onclick = (e) => {
+    item.addEventListener('click', (e) => {
       if (e.target.closest('.kick-btn')) return;
       openDm(item.dataset.name);
-    };
+    });
+    item.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.kick-btn')) {
+        e.preventDefault();
+        openDm(item.dataset.name);
+      }
+    });
   });
   el.querySelectorAll('.kick-btn').forEach(btn => {
     btn.onclick = async (e) => {
@@ -2664,12 +3105,12 @@ function renderThreads() {
   const all = [{ name: '(all)', _all: true }, { name: 'general' }, ...threads.filter(t => t.name !== 'general')];
   el.innerHTML = all.map(t => {
     const isActive = t._all ? !currentThread : currentThread === t.name;
-    return `<div class="thread-item ${isActive ? 'active' : ''}" data-thread="${t._all ? '' : esc(t.name)}">
+    return `<div class="thread-item ${isActive ? 'active' : ''}" data-thread="${t._all ? '' : esc(t.name)}" tabindex="0" role="button">
       <span class="thread-hash">#</span>${esc(t.name)}
     </div>`;
   }).join('');
   el.querySelectorAll('.thread-item').forEach(item => {
-    item.onclick = () => {
+    const activate = () => {
       currentDmAgent = null;
       currentThread = item.dataset.thread || null;
       updateThreadHeader();
@@ -2677,6 +3118,8 @@ function renderThreads() {
       renderDmList();
       reloadMessages();
     };
+    item.addEventListener('click', activate);
+    item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
   });
   // Update thread select in compose
   const sel = document.getElementById('thread-select');
@@ -2719,7 +3162,7 @@ function renderDmList() {
     const color = agentColor(name);
     const unread = dmUnread[name] || 0;
     const isActive = currentDmAgent === name;
-    return `<div class="dm-item ${isActive ? 'active' : ''}" data-name="${esc(name)}">
+    return `<div class="dm-item ${isActive ? 'active' : ''}" data-name="${esc(name)}" tabindex="0" role="button" aria-label="Open DM with ${esc(name)}">
       <div class="dm-avatar" style="background:${color}22; color:${color}">${esc(initials(name))}</div>
       <span class="dm-item-name">${esc(name)}</span>
       ${unread ? `<span class="dm-badge">${unread}</span>` : ''}
@@ -2727,6 +3170,7 @@ function renderDmList() {
   }).join('');
   el.querySelectorAll('.dm-item').forEach(item => {
     item.addEventListener('click', () => openDm(item.dataset.name));
+    item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDm(item.dataset.name); } });
   });
 }
 
@@ -2777,6 +3221,110 @@ function matchesInboxFilter(m) {
   return m.recipient && m.recipient === me;
 }
 
+// ── Escape for HTML attribute strings ───────────────────────────────
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── ArtifactCard rendering ────────────────────────────────────────────
+function renderArtifactCard(code, lang, filename) {
+  const lines = code.split('\n');
+  const collapsed = lines.length > 20;
+  const visibleLines = collapsed ? lines.slice(0, 20).join('\n') : code;
+  const safeCode = escapeHtml(visibleLines);
+  const fullCode = escapeHtml(code);
+  return `<div class="artifact-card">
+    <div class="artifact-header">
+      <span class="artifact-lang">${escapeHtml(lang || 'text')}</span>
+      ${filename ? `<span class="artifact-filename">${escapeHtml(filename)}</span>` : ''}
+      <div class="artifact-actions">
+        <button class="artifact-copy-btn" onclick="copyArtifact(this)" data-full-content="${fullCode}" title="Copy">Copy</button>
+        ${filename ? `<button class="artifact-dl-btn" onclick="downloadArtifact(this,'${escapeHtml(filename)}')" title="Download">↓</button>` : ''}
+        <button class="artifact-collapse-btn" onclick="toggleArtifact(this)" title="Collapse">⌃</button>
+      </div>
+    </div>
+    <pre class="artifact-body"><code>${safeCode}</code></pre>
+    ${collapsed ? `<div class="artifact-more" onclick="expandArtifact(this)" tabindex="0" role="button">Show ${lines.length - 20} more lines</div>` : ''}
+  </div>`;
+}
+
+function parseCodeBlocks(content) {
+  // Returns array of {type:'text'|'code', text, lang, filename}
+  const parts = [];
+  const re = /```(\w*)\n([\s\S]*?)```/g;
+  let lastIdx = 0, m;
+  while ((m = re.exec(content)) !== null) {
+    if (m.index > lastIdx) parts.push({type:'text', text: content.slice(lastIdx, m.index)});
+    parts.push({type:'code', lang: m[1] || 'text', text: m[2]});
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < content.length) parts.push({type:'text', text: content.slice(lastIdx)});
+  return parts;
+}
+
+function renderContent(m) {
+  const parts = parseCodeBlocks(m.content || '');
+  return parts.map(p => {
+    if (p.type === 'code') return renderArtifactCard(p.text, p.lang, null);
+    return escapeHtml(p.text).replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
+  }).join('');
+}
+
+function copyArtifact(btn) {
+  const code = btn.dataset.fullContent || '';
+  const decoded = code.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+  navigator.clipboard.writeText(decoded).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  });
+}
+
+function downloadArtifact(btn, filename) {
+  const code = btn.closest('.artifact-card').querySelector('.artifact-body code').textContent;
+  const blob = new Blob([code], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function toggleArtifact(btn) {
+  const body = btn.closest('.artifact-card').querySelector('.artifact-body');
+  const more = btn.closest('.artifact-card').querySelector('.artifact-more');
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (more) more.style.display = collapsed ? 'none' : '';
+  btn.title = collapsed ? 'Collapse' : 'Expand';
+  btn.textContent = collapsed ? '⌃' : '⌄';
+}
+
+function expandArtifact(moreEl) {
+  const card = moreEl.closest('.artifact-card');
+  const body = card.querySelector('.artifact-body');
+  // The full content is in the copy button's data attribute
+  const copyBtn = card.querySelector('.artifact-copy-btn');
+  if (copyBtn) {
+    const full = copyBtn.dataset.fullContent || '';
+    const decoded = full.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+    body.querySelector('code').textContent = decoded;
+  }
+  moreEl.remove();
+}
+
+// ── A2A detection ─────────────────────────────────────────────────────
+let knownUsers = []; // populated from /users endpoint if admin
+function isAgentName(name) {
+  return agents.some(a => a.name === name);
+}
+function isUserName(name) {
+  return knownUsers.some(u => (u.username === name || u.display_name === name));
+}
+function isA2A(sender, recipient) {
+  if (!recipient) return false;
+  return isAgentName(sender) && isAgentName(recipient) && !isUserName(sender) && !isUserName(recipient);
+}
+
 // ── Render messages
 function buildMsgGroup(msgs, startIdx) {
   // Find consecutive msgs from same sender+recipient
@@ -2793,6 +3341,9 @@ function buildMsgGroup(msgs, startIdx) {
   const toTag = first.recipient ? `<span class="msg-to">→ ${esc(first.recipient)}</span>` : '';
   const threadTag = (first.thread && first.thread !== 'general' && !currentThread)
     ? `<span class="msg-thread-tag">#${esc(first.thread)}</span>` : '';
+  const a2a = isA2A(first.sender, first.recipient);
+  const autoBadge = a2a ? `<span class="auto-badge">auto</span>` : '';
+  const rowClass = a2a ? ' msg-row a2a' : ' msg-row';
 
   const bubbles = msgs.slice(startIdx, end).map(m => {
     const typePill = m.msg_type && m.msg_type !== 'chat'
@@ -2800,7 +3351,7 @@ function buildMsgGroup(msgs, startIdx) {
     const isRequest = m.msg_type === 'request';
     const pendingClass = (isRequest && m._pending) ? ' pending' : '';
     const correlationAttr = m.correlation_id ? ` data-correlation="${esc(m.correlation_id)}"` : '';
-    const content = esc(m.content).replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
+    const content = renderContent(m);
     const artifacts = m.artifacts && m.artifacts.length
       ? `<div class="artifacts">${m.artifacts.map(a =>
           `<span class="artifact">${a.type === 'file' ? '📄' : a.type === 'code' ? '💻' : '🔗'} ${esc(a.content.substring(0, 60))}</span>`
@@ -2814,13 +3365,13 @@ function buildMsgGroup(msgs, startIdx) {
   }).join('');
 
   return {
-    html: `<div class="msg-group">
-      <div class="avatar" style="background:${color}22; color:${color}">${esc(initials(first.sender))}</div>
+    html: `<div class="msg-group${rowClass}">
+      <div class="avatar msg-avatar" style="background:${color}22; color:${color}">${esc(initials(first.sender))}</div>
       <div class="msg-group-body">
         <div class="msg-group-header">
           <span class="msg-sender" style="color:${color}">${esc(first.sender)}</span>
           ${toTag} ${threadTag}
-          <span class="msg-ts">${relTime(first.timestamp)}</span>
+          <span class="msg-ts">${relTime(first.timestamp)}${autoBadge}</span>
         </div>
         ${bubbles}
       </div>
@@ -2842,7 +3393,23 @@ async function reloadMessages() {
   if (!filtered.length) {
     const scope = currentThread ? '#'+currentThread : 'any thread';
     const suffix = inboxOnly ? ' addressed to you' : '';
-    el.innerHTML = `<div class="empty-state"><div class="icon">◎</div><p>No messages in ${scope}${suffix} yet.</p></div>`;
+    if (!agents.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🤖</div>
+        <div class="empty-title">No agents connected yet</div>
+        <div class="empty-body">
+          AgentBridge is running. Connect your first agent:<br>
+          <code class="empty-cmd">python -m agentbridge register --name "my-agent"</code>
+          <button class="empty-copy-btn" onclick="copyCmd(this)">Copy</button>
+        </div>
+      </div>`;
+    } else {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">◎</div>
+        <div class="empty-title">No messages yet</div>
+        <div class="empty-body">Agents are online and waiting. Send a message to get started.</div>
+      </div>`;
+    }
     return;
   }
   let html = '';
@@ -2881,6 +3448,10 @@ function appendMessage(m) {
       dmUnread[m.sender] = (dmUnread[m.sender] || 0) + 1;
       renderDmList();
     }
+  }
+  // Browser tab unread
+  if (!m._pending && m.sender !== me) {
+    incrementUnread();
   }
   if (currentThread && m.thread !== currentThread) return;
   if (!matchesInboxFilter(m)) return;
@@ -2976,8 +3547,47 @@ async function sendMessage() {
       body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id: correlation_id || undefined }),
     });
   } catch (err) {
-    addSystemMsg(`Send failed: ${err.message}`);
+    // Mark the local message as send-error (persistent, with retry)
+    const bubbles = document.querySelectorAll(`[data-correlation="${localId}"], .msg-bubble.pending`);
+    document.querySelectorAll('[data-correlation="' + localId + '"]').forEach(el => {
+      el.classList.remove('pending');
+      el.classList.add('send-error');
+      if (!el.querySelector('.send-error-label')) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'send-error-label';
+        errDiv.innerHTML = `Failed to send <button class="retry-send-btn" tabindex="0">Retry</button>`;
+        el.appendChild(errDiv);
+        errDiv.querySelector('.retry-send-btn').addEventListener('click', async () => {
+          el.classList.remove('send-error');
+          el.classList.add('pending');
+          errDiv.remove();
+          try {
+            await api('/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sender, content, recipient, thread, msg_type, correlation_id: correlation_id || undefined }),
+            });
+            el.classList.remove('pending');
+          } catch(e2) {
+            el.classList.remove('pending');
+            el.classList.add('send-error');
+            const errDiv2 = document.createElement('div');
+            errDiv2.className = 'send-error-label';
+            errDiv2.textContent = 'Failed to send';
+            el.appendChild(errDiv2);
+          }
+        });
+      }
+    });
   }
+}
+
+function copyCmd(btn) {
+  const code = btn.previousElementSibling?.textContent || '';
+  navigator.clipboard.writeText(code.trim()).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  });
 }
 
 document.getElementById('send-btn').onclick = sendMessage;
@@ -2992,7 +3602,7 @@ msgTA.addEventListener('keydown', e => {
   if (mentionPopup.classList.contains('visible')) {
     if (e.key === 'ArrowDown')  { e.preventDefault(); moveMention(1); return; }
     if (e.key === 'ArrowUp')    { e.preventDefault(); moveMention(-1); return; }
-    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionActiveIndex); return; }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionActiveIndex >= 0 ? mentionActiveIndex : 0); return; }
     if (e.key === 'Escape')     { hideMentionPopup(); return; }
   }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); return; }
@@ -3033,6 +3643,64 @@ document.addEventListener('keydown', e => {
 }, true);
 msgTA.addEventListener('input', handleMentionInput);
 msgTA.addEventListener('blur', () => setTimeout(hideMentionPopup, 150));
+
+// ── Composer auto-grow ────────────────────────────────────────────────
+msgTA.addEventListener('input', () => {
+  msgTA.style.height = 'auto';
+  msgTA.style.height = Math.min(msgTA.scrollHeight, 200) + 'px';
+});
+
+// ── Code paste detection ──────────────────────────────────────────────
+function escapeAttr(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showPastePrompt(text) {
+  const existing = msgTA.parentElement.parentElement.querySelector('.paste-prompt');
+  if (existing) existing.remove();
+  const prompt = document.createElement('div');
+  prompt.className = 'paste-prompt';
+  const lineCount = text.split('\n').length;
+  prompt.innerHTML = `
+    <span>Paste detected (${lineCount} lines)</span>
+    <button id="paste-plain-btn">Plain text</button>
+    <button id="paste-code-btn">Code block</button>
+    <button id="paste-cancel-btn">Cancel</button>
+  `;
+  msgTA.closest('.compose').insertBefore(prompt, msgTA.closest('.compose-row'));
+  prompt.querySelector('#paste-plain-btn').addEventListener('click', () => {
+    msgTA.value += text;
+    msgTA.style.height = 'auto';
+    msgTA.style.height = Math.min(msgTA.scrollHeight, 200) + 'px';
+    prompt.remove();
+  });
+  prompt.querySelector('#paste-code-btn').addEventListener('click', () => {
+    msgTA.value += '\n```\n' + text + '\n```\n';
+    msgTA.style.height = 'auto';
+    msgTA.style.height = Math.min(msgTA.scrollHeight, 200) + 'px';
+    prompt.remove();
+  });
+  prompt.querySelector('#paste-cancel-btn').addEventListener('click', () => prompt.remove());
+}
+
+msgTA.addEventListener('paste', e => {
+  const text = e.clipboardData.getData('text/plain');
+  const newlines = (text.match(/\n/g)||[]).length;
+  if (newlines >= 3) {
+    e.preventDefault();
+    showPastePrompt(text);
+  }
+});
+
+// ── Advanced toggle ───────────────────────────────────────────────────
+const advancedToggle = document.getElementById('advanced-toggle');
+const advancedControls = document.getElementById('advanced-controls');
+if (advancedToggle && advancedControls) {
+  advancedToggle.addEventListener('click', () => {
+    const visible = advancedControls.classList.toggle('visible');
+    advancedToggle.textContent = visible ? 'Advanced ▾' : 'Advanced ▸';
+  });
+}
 document.getElementById('sender-input').addEventListener('input', scheduleRegister);
 document.getElementById('sender-input').addEventListener('blur', registerSelf);
 document.getElementById('sender-input').addEventListener('blur', () => { if (inboxOnly) reloadMessages(); });
@@ -3069,17 +3737,49 @@ function handleMentionInput() {
 }
 
 function showMentionPopup(query) {
-  const pool = [{ name: 'all', role: 'Broadcast to everyone' }, ...agents];
-  mentionFiltered = pool.filter(a => a.name.toLowerCase().includes(query));
+  const agentPool = [{ name: 'all', role: 'Broadcast to everyone', _isAgent: true }, ...agents.map(a => ({...a, _isAgent: true}))];
+  const userPool = knownUsers.map(u => ({ name: u.username, role: u.display_name || '', _isAgent: false }));
+  const filteredAgents = agentPool.filter(a => a.name.toLowerCase().includes(query));
+  const filteredUsers = userPool.filter(u => u.name.toLowerCase().includes(query));
+  mentionFiltered = [...filteredAgents, ...filteredUsers];
   if (!mentionFiltered.length) { hideMentionPopup(); return; }
-  mentionActiveIndex = 0;
-  mentionPopup.innerHTML = mentionFiltered.map((a, i) => {
-    const color = agentColor(a.name);
-    return `<div class="mention-option ${i===0?'active':''}" data-idx="${i}">
-      <div class="mo-avatar" style="background:${color}22;color:${color}">${esc(initials(a.name))}</div>
-      <div><div class="mo-name">@${esc(a.name)}</div><div class="mo-role">${esc(a.role||'')}</div></div>
-    </div>`;
-  }).join('');
+  mentionActiveIndex = -1;
+
+  let html = '';
+  if (filteredAgents.length) {
+    html += `<div class="mention-group-header">Agents</div>`;
+    html += filteredAgents.map((a, i) => {
+      const color = agentColor(a.name);
+      return `<div class="mention-option agent-type" data-idx="${i}" role="option" aria-selected="false" tabindex="-1">
+        <div class="mo-avatar" style="background:${color}22;color:${color}">${esc(initials(a.name))}</div>
+        <div><div class="mo-name">@${esc(a.name)}</div><div class="mo-role">${esc(a.role||'')}</div></div>
+      </div>`;
+    }).join('');
+  }
+  if (filteredUsers.length) {
+    html += `<div class="mention-group-header">Users</div>`;
+    html += filteredUsers.map((u, i) => {
+      const idx = filteredAgents.length + i;
+      const color = agentColor(u.name);
+      return `<div class="mention-option user-type" data-idx="${idx}" role="option" aria-selected="false" tabindex="-1">
+        <div class="mo-avatar" style="background:${color}22;color:${color}">${esc(initials(u.name))}</div>
+        <div><div class="mo-name">@${esc(u.name)}</div><div class="mo-role">${esc(u.role||'')}</div></div>
+      </div>`;
+    }).join('');
+  }
+
+  mentionPopup.innerHTML = html;
+
+  // Smart positioning: if composer is near bottom, show above; if near top, show below
+  const composerRect = msgTA.closest('.compose-input-wrap').getBoundingClientRect();
+  if (composerRect.top < 280) {
+    mentionPopup.style.bottom = '';
+    mentionPopup.style.top = 'calc(100% + 6px)';
+  } else {
+    mentionPopup.style.top = '';
+    mentionPopup.style.bottom = 'calc(100% + 6px)';
+  }
+
   mentionPopup.classList.add('visible');
   mentionPopup.querySelectorAll('.mention-option').forEach(opt => {
     opt.addEventListener('mousedown', e => { e.preventDefault(); selectMention(+opt.dataset.idx); });
@@ -3089,8 +3789,15 @@ function showMentionPopup(query) {
 function hideMentionPopup() { mentionPopup.classList.remove('visible'); mentionStart = -1; mentionFiltered = []; }
 
 function moveMention(dir) {
+  const options = mentionPopup.querySelectorAll('.mention-option');
+  if (!options.length) return;
   mentionActiveIndex = (mentionActiveIndex + dir + mentionFiltered.length) % mentionFiltered.length;
-  mentionPopup.querySelectorAll('.mention-option').forEach((o, i) => o.classList.toggle('active', i === mentionActiveIndex));
+  options.forEach((o, i) => {
+    const active = i === mentionActiveIndex;
+    o.classList.toggle('active', active);
+    o.setAttribute('aria-selected', active ? 'true' : 'false');
+    if (active) o.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 function selectMention(idx) {
@@ -3108,16 +3815,52 @@ function selectMention(idx) {
   msgTA.focus();
 }
 
+// ── Disconnect banner helpers ─────────────────────────────────────────
+let _currentSSE = null;
+function showDisconnectBanner() {
+  const msgEl = document.getElementById('messages');
+  if (msgEl && !document.getElementById('disconnect-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'disconnect-banner';
+    banner.className = 'disconnect-banner';
+    banner.setAttribute('role', 'alert');
+    banner.setAttribute('aria-live', 'assertive');
+    banner.innerHTML = `<span>⚠ Disconnected from server. Attempting to reconnect…</span>
+      <button onclick="reconnectNow()">Retry now</button>`;
+    msgEl.parentElement.insertBefore(banner, msgEl);
+  }
+}
+function hideDisconnectBanner() {
+  const banner = document.getElementById('disconnect-banner');
+  if (banner) {
+    const msgEl = document.getElementById('messages');
+    // Show success banner briefly
+    const success = document.createElement('div');
+    success.className = 'reconnect-success-banner';
+    success.textContent = '✓ Reconnected successfully';
+    banner.parentElement.insertBefore(success, banner);
+    banner.remove();
+    setTimeout(() => success.remove(), 3000);
+  }
+}
+function reconnectNow() {
+  if (_currentSSE) { try { _currentSSE.close(); } catch(_) {} }
+  connectSSE();
+}
+
 // ── SSE
 function connectSSE() {
   const logoDot = document.getElementById('logo-dot');
   const badge = document.getElementById('conn-badge');
   const es = new EventSource(API + '/events' + (TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : ''));
+  _currentSSE = es;
 
   const setConn = (connected) => {
     badge.textContent = connected ? 'Connected' : 'Reconnecting';
     badge.className = 'conn-badge' + (connected ? '' : ' disconnected');
     logoDot.className = 'logo-dot' + (connected ? '' : ' disconnected');
+    if (connected) hideDisconnectBanner();
+    else showDisconnectBanner();
   };
 
   es.onopen = () => setConn(true);
@@ -3343,9 +4086,12 @@ setFontSize(Number(currentFontSize) || 14);
 const userMenu = document.getElementById('user-menu');
 const userCard = document.getElementById('user-card');
 const clearBoardBtn = document.getElementById('clear-board-btn');
+userCard.setAttribute('tabindex', '0');
+userCard.setAttribute('role', 'button');
 userCard.addEventListener('click', () => {
   userMenu.classList.toggle('visible');
 });
+userCard.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); userMenu.classList.toggle('visible'); } });
 document.addEventListener('click', (e) => {
   if (!userMenu.classList.contains('visible')) return;
   if (userMenu.contains(e.target) || userCard.contains(e.target)) return;
@@ -3355,6 +4101,40 @@ clearBoardBtn.addEventListener('click', () => {
   if (!confirm('Clear all messages and threads?')) return;
   clearBoard(true);
   userMenu.classList.remove('visible');
+});
+
+// ── Global keyboard shortcuts ─────────────────────────────────────────
+function focusComposer() {
+  msgTA.focus();
+  msgTA.setSelectionRange(msgTA.value.length, msgTA.value.length);
+}
+function toggleSidebar() {
+  applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+}
+function closeAllPopups() {
+  hideMentionPopup();
+  userMenu.classList.remove('visible');
+  closeSettings();
+}
+function navigateThread(dir) {
+  const items = [...document.querySelectorAll('.thread-item')];
+  if (!items.length) return;
+  const cur = items.findIndex(el => el.classList.contains('active'));
+  const next = Math.max(0, Math.min(items.length - 1, cur + dir));
+  if (items[next]) items[next].click();
+}
+
+document.addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey;
+  // Don't fire shortcuts when typing in inputs (except Escape)
+  const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+  if (mod && e.key === '/') { e.preventDefault(); focusComposer(); return; }
+  if (mod && e.key === 'b') { e.preventDefault(); toggleSidebar(); return; }
+  if (mod && e.key === ',') { e.preventDefault(); openSettings(); return; }
+  if (e.key === 'Escape' && !inInput) { closeAllPopups(); return; }
+  if (e.key === 'Escape' && inInput && document.activeElement === msgTA) { closeAllPopups(); return; }
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); navigateThread(1); return; }
+  if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); navigateThread(-1); return; }
 });
 
 // ── Panel drag-and-drop reordering ──────────────────────────────────────────
@@ -3635,6 +4415,7 @@ async function startApp() {
     await Promise.all([
       api('/agents').then(a => { agents = a; renderAgents(); }),
       api('/threads').then(t => { threads = t; renderThreads(); }),
+      api('/users').then(u => { knownUsers = u; }).catch(() => {}),
     ]);
     updateThreadHeader();
     await reloadMessages();
