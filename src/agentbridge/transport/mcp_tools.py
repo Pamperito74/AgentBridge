@@ -957,3 +957,175 @@ def memory_delete(agent_name: str, key: str) -> str:
     if not deleted:
         return f"Key '{key}' not found for agent '{agent_name}'"
     return f"Deleted: {agent_name}[{key}]"
+
+
+# ── Task Tools ──────────────────────────────────────────────────────────────
+
+
+def _fmt_task(t: dict) -> str:
+    """Format a single task dict as a human-readable line."""
+    status = t.get("status", "?")
+    priority = t.get("priority", "medium")
+    assignee = t.get("assignee") or "unassigned"
+    labels = t.get("labels") or []
+    label_str = f" [{', '.join(labels)}]" if labels else ""
+    return (
+        f"[{status}] {t['title']} (id={t['id'][:8]} priority={priority} "
+        f"assignee={assignee}{label_str})"
+    )
+
+
+@mcp.tool()
+def task_list(
+    status: str | None = None,
+    assignee: str | None = None,
+    limit: int = 20,
+) -> str:
+    """List tasks, optionally filtered by status or assignee.
+
+    status: todo | in_progress | in_review | done | blocked | cancelled
+    Returns a formatted list of matching tasks.
+    """
+    if _remote_url():
+        params: dict = {"limit": limit}
+        if status:
+            params["status"] = status
+        if assignee:
+            params["assignee"] = assignee
+        tasks = _rhttp("GET", "/tasks", params=params)
+        if not tasks:
+            return "No tasks found."
+        return "\n".join(_fmt_task(t) for t in (tasks if isinstance(tasks, list) else []))
+    tasks = get_store().list_tasks(status=status, assignee=assignee, limit=limit)
+    if not tasks:
+        return "No tasks found."
+    return "\n".join(_fmt_task(t) for t in tasks)
+
+
+@mcp.tool()
+def task_create(
+    title: str,
+    created_by: str,
+    description: str = "",
+    priority: str = "medium",
+    assignee: str | None = None,
+    labels: list[str] | None = None,
+    thread: str = "general",
+) -> str:
+    """Create a new task.
+
+    priority: low | medium | high | critical
+    assignee: agent name to assign immediately (optional — leave blank to let agents claim it)
+    labels: list of tag strings, e.g. ['backend', 'bug']
+    Returns the created task id and title.
+    """
+    if _remote_url():
+        body: dict = {
+            "title": title,
+            "created_by": created_by,
+            "description": description,
+            "priority": priority,
+            "thread": thread,
+            "labels": labels or [],
+        }
+        if assignee:
+            body["assignee"] = assignee
+        task = _rhttp("POST", "/tasks", body)
+        return f"Task created: {task['id'][:8]} — {task['title']}"
+    task = get_store().create_task(
+        title=title,
+        created_by=created_by,
+        description=description,
+        priority=priority,
+        assignee=assignee,
+        thread=thread,
+        labels=labels or [],
+    )
+    return f"Task created: {task['id'][:8]} — {task['title']}"
+
+
+@mcp.tool()
+def task_claim(task_id: str, agent_name: str) -> str:
+    """Claim an unassigned task and set its status to in_progress.
+
+    Use this when you pick up work. Prevents two agents from working on
+    the same task simultaneously.
+    Returns the updated task or an error if already claimed by someone else.
+    """
+    if _remote_url():
+        try:
+            task = _rhttp("POST", f"/tasks/{task_id}/claim", params={"agent_name": agent_name})
+            return f"Claimed: [{task['status']}] {task['title']} (assigned to {task['assignee']})"
+        except RuntimeError as e:
+            return f"Could not claim task: {e}"
+    task = get_store().get_task(task_id)
+    if not task:
+        return f"Task {task_id} not found."
+    if task.get("assignee") and task["assignee"] != agent_name:
+        return f"Task already claimed by {task['assignee']}."
+    task = get_store().update_task(task_id, assignee=agent_name, status="in_progress")
+    return f"Claimed: [{task['status']}] {task['title']} (assigned to {task['assignee']})"
+
+
+@mcp.tool()
+def task_complete(task_id: str, note: str = "") -> str:
+    """Mark a task as done.
+
+    Optionally provide a completion note (e.g. PR number, summary of what was done).
+    """
+    if _remote_url():
+        if note:
+            _rhttp("PATCH", f"/tasks/{task_id}", {"description": note})
+        task = _rhttp("POST", f"/tasks/{task_id}/complete")
+        return f"Completed: {task['title']}"
+    if note:
+        get_store().update_task(task_id, description=note)
+    task = get_store().update_task(task_id, status="done")
+    if not task:
+        return f"Task {task_id} not found."
+    return f"Completed: {task['title']}"
+
+
+@mcp.tool()
+def task_update(
+    task_id: str,
+    status: str | None = None,
+    assignee: str | None = None,
+    priority: str | None = None,
+    description: str | None = None,
+) -> str:
+    """Update a task's status, assignee, priority, or description.
+
+    status: todo | in_progress | in_review | done | blocked | cancelled
+    priority: low | medium | high | critical
+    Only provided fields are updated — omit fields you don't want to change.
+    """
+    if _remote_url():
+        updates: dict = {}
+        if status is not None:
+            updates["status"] = status
+        if assignee is not None:
+            updates["assignee"] = assignee
+        if priority is not None:
+            updates["priority"] = priority
+        if description is not None:
+            updates["description"] = description
+        if not updates:
+            return "Nothing to update — provide at least one field."
+        task = _rhttp("PATCH", f"/tasks/{task_id}", updates)
+        return _fmt_task(task)
+    updates = {}
+    if status is not None:
+        updates["status"] = status
+    if assignee is not None:
+        updates["assignee"] = assignee
+    if priority is not None:
+        updates["priority"] = priority
+    if description is not None:
+        updates["description"] = description
+    if not updates:
+        return "Nothing to update — provide at least one field."
+    task = get_store().update_task(task_id, **updates)
+    if not task:
+        return f"Task {task_id} not found."
+    return _fmt_task(task)
