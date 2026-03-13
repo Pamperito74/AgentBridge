@@ -428,8 +428,6 @@ def serve(host: str, port: int, public: bool):
     """Start the AgentBridge HTTP server."""
     if public:
         host = "0.0.0.0"
-    elif host == "0.0.0.0":
-        host = "127.0.0.1"
     click.echo(f"Starting AgentBridge on {host}:{port}")
     click.echo(f"Dashboard: http://localhost:{port}/ui")
     if AUTH_TOKEN:
