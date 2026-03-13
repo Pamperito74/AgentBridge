@@ -289,7 +289,7 @@ def actors():
 
 @cli.command()
 @click.argument("name")
-@click.option("--status", "-s", default="online", type=click.Choice(["online", "busy", "idle"]), help="Agent status")
+@click.option("--status", "-s", default="online", type=click.Choice(["online", "busy", "idle", "needs_input"]), help="Agent status")
 @click.option("--working-on", "-w", default="", help="Brief description of current task")
 def heartbeat(name: str, status: str, working_on: str):
     """Update agent status and heartbeat."""
@@ -504,6 +504,26 @@ def doctor():
 
     if failed:
         raise click.exceptions.Exit(1)
+
+
+@cli.command()
+@click.option("--url", envvar="AGENTBRIDGE_URL", default="http://localhost:7890",
+              show_default=True, help="AgentBridge server URL")
+@click.option("--token", envvar="AGENTBRIDGE_TOKEN", default="", help="Auth token")
+@click.option("--name", envvar="AGENT_NAME", default="", help="Register as this agent name (optional)")
+def tui(url: str, token: str, name: str) -> None:
+    """Launch the interactive terminal UI."""
+    try:
+        from agentbridge.tui import AgentBridgeApp
+    except ImportError:
+        click.echo(
+            "The TUI requires the 'textual' package.\n"
+            "Install it with:  pip install 'agentbridge[tui]'",
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
+    app = AgentBridgeApp(server_url=url, token=token, agent_name=name)
+    app.run()
 
 
 if __name__ == "__main__":

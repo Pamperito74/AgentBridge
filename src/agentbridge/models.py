@@ -13,7 +13,7 @@ MENTION_RE = re.compile(r"@([\w-]+)")
 class Agent(BaseModel):
     name: str
     role: str = ""
-    status: str = "online"  # online | busy | idle
+    status: str = "online"  # online | busy | idle | needs_input
     working_on: str = ""
     capabilities: list[str] = Field(default_factory=list)
     agent_type: str = "bot"  # 'bot' | 'human'
