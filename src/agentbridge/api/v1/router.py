@@ -12,6 +12,7 @@ from .tasks import router as tasks_router
 from .costs import router as costs_router
 from .approvals import router as approvals_router
 from .activity import router as activity_router
+from .automation import router as automation_router
 
 router = APIRouter()
 
@@ -26,3 +27,4 @@ router.include_router(tasks_router)
 router.include_router(costs_router)
 router.include_router(approvals_router)
 router.include_router(activity_router)
+router.include_router(automation_router)

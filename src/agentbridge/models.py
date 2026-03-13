@@ -24,6 +24,22 @@ class Agent(BaseModel):
     # Budget tracking
     budget_monthly_cents: int = 0   # 0 = no limit
     spent_monthly_cents: int = 0
+    # Automation
+    is_orchestrator: bool = False           # receives unassigned-task notifications
+    autonomous: bool = False                # watches threads without @mention
+    autonomous_mode: str = "decide"         # "all" | "decide"
+    watch_threads: list[str] = Field(default_factory=list)  # threads to monitor autonomously
+
+
+class AutomationRule(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    trigger_event: str   # task.created | message | agent.registered | approval.requested
+    conditions: dict = Field(default_factory=dict)   # {field: value} — all must match
+    action_type: str     # notify_orchestrator | assign_task | send_message | forward_to_agent
+    action_params: dict = Field(default_factory=dict)
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Task(BaseModel):

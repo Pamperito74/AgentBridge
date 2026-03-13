@@ -54,6 +54,14 @@ CONTEXT_MESSAGES = int(os.environ.get("CONTEXT_MESSAGES", "20"))
 HEARTBEAT_INTERVAL = 30  # seconds — well within the 4h TTL
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 
+# Autonomous mode — agent watches threads without needing @mention
+# AUTONOMOUS=1          enable autonomous mode
+# AUTONOMOUS_MODE=all   respond to every message | decide = Claude pre-screens relevance
+# WATCH_THREADS=general,ops   comma-separated threads to monitor
+AUTONOMOUS = os.environ.get("AUTONOMOUS", "0") == "1"
+AUTONOMOUS_MODE = os.environ.get("AUTONOMOUS_MODE", "decide")  # "all" | "decide"
+WATCH_THREADS = [t.strip() for t in os.environ.get("WATCH_THREADS", "general").split(",") if t.strip()]
+
 SYSTEM_PROMPT = f"""\
 You are {AGENT_NAME}, an AI assistant connected to AgentBridge — a multi-agent \
 communication platform where AI agents and humans collaborate in real time.
@@ -107,6 +115,9 @@ def register() -> None:
         "role": AGENT_ROLE,
         "capabilities": ["chat", "code", "analysis", "reasoning", "planning"],
         "agent_type": "bot",
+        "autonomous": AUTONOMOUS,
+        "autonomous_mode": AUTONOMOUS_MODE,
+        "watch_threads": WATCH_THREADS if AUTONOMOUS else [],
     }
     resp = requests.post(
         f"{BRIDGE_URL}/agents",
@@ -201,6 +212,37 @@ def is_addressed(msg: dict) -> bool:
     if _MENTION_PATTERN.search(content):
         return True
 
+    return False
+
+
+def is_autonomous_relevant(msg: dict) -> bool:
+    """In autonomous mode, decide whether this message warrants a response.
+
+    autonomous_mode="all"    → always True (respond to everything in watched threads)
+    autonomous_mode="decide" → ask Claude whether the message is relevant
+    """
+    if AUTONOMOUS_MODE == "all":
+        return True
+
+    # "decide" mode: quick Claude pre-screen
+    content = msg.get("content", "")
+    sender = msg.get("sender", "?")
+    system = (
+        f"You are {AGENT_NAME}. Decide if the following message requires a response from you. "
+        "Reply with exactly one word: YES or NO."
+    )
+    try:
+        response = anthropic_client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=5,
+            system=system,
+            messages=[{"role": "user", "content": f"{sender}: {content}"}],
+        )
+        for block in response.content:
+            if block.type == "text":
+                return block.text.strip().upper().startswith("Y")
+    except Exception as exc:
+        _debug(f"Relevance check failed: {exc}")
     return False
 
 
@@ -338,10 +380,17 @@ def main() -> None:
                 # Update context first
                 context_by_thread[thread].append(msg)
 
-                if is_addressed(msg):
+                # Determine whether to respond: explicit address OR autonomous watch
+                thread_watched = AUTONOMOUS and thread in WATCH_THREADS
+                should_respond = is_addressed(msg) or (
+                    thread_watched and not is_addressed(msg) and is_autonomous_relevant(msg)
+                )
+
+                if should_respond:
                     sender = msg.get("sender", "unknown")
                     content_preview = msg.get("content", "")[:80]
-                    _log(f"Mentioned by {sender} in #{thread}: {content_preview}")
+                    mode_tag = "[autonomous]" if thread_watched and not is_addressed(msg) else ""
+                    _log(f"{mode_tag} Responding to {sender} in #{thread}: {content_preview}")
 
                     # Build context (exclude the triggering message itself — it's appended above)
                     thread_history = list(context_by_thread[thread])[:-1]
