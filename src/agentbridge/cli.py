@@ -289,7 +289,7 @@ def actors():
 
 @cli.command()
 @click.argument("name")
-@click.option("--status", "-s", default="online", type=click.Choice(["online", "busy", "idle"]), help="Agent status")
+@click.option("--status", "-s", default="online", type=click.Choice(["online", "busy", "idle", "needs_input"]), help="Agent status")
 @click.option("--working-on", "-w", default="", help="Brief description of current task")
 def heartbeat(name: str, status: str, working_on: str):
     """Update agent status and heartbeat."""

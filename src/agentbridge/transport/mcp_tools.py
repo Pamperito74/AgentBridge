@@ -180,7 +180,7 @@ def request_agent(
     sender: str,
     recipient: str,
     content: str,
-    timeout_sec: float = 60.0,
+    timeout_sec: float = 180.0,
     thread: str = "general",
 ) -> str:
     """Send a request to another agent and WAIT synchronously for their response.
@@ -791,9 +791,13 @@ def agents() -> str:
 
 @mcp.tool()
 def heartbeat(name: str, status: str = "online", working_on: str = "") -> str:
-    """Update agent status. status: online|busy|idle."""
-    if status not in {"online", "busy", "idle"}:
-        raise ValueError("status must be one of: online, busy, idle")
+    """Update agent status. status: online|busy|idle|needs_input.
+
+    Use needs_input when blocked waiting for human direction or approval.
+    This surfaces as a ⚠ indicator in the UI so humans know to intervene.
+    """
+    if status not in {"online", "busy", "idle", "needs_input"}:
+        raise ValueError("status must be one of: online, busy, idle, needs_input")
     if _remote_url():
         a = _rhttp(
             "POST",

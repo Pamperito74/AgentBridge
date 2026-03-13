@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
 """
-Claude AI Agent Connector for AgentBridge
-==========================================
-Registers as an AI agent on AgentBridge, listens for messages that @mention it
-or are sent directly to it, calls Claude claude-opus-4-6 API, and responds
-automatically in the UI.
+AI Agent Connector for AgentBridge
+====================================
+Model-agnostic LLM chat agent. Registers on AgentBridge, listens for messages
+that @mention it or are sent directly to it, calls the configured LLM, and
+responds automatically in the UI.
+
+Supports any Anthropic model out of the box. Swap in other providers by
+replacing the `call_llm()` function.
 
 Usage
 -----
-  python connectors/claude_agent.py
+  python connectors/ai_agent.py
 
 Required
   ANTHROPIC_API_KEY=sk-ant-...
 
 Optional
-  AGENTBRIDGE_URL=http://172.31.141.155:7890   (default)
-  AGENTBRIDGE_TOKEN=...                         (if server requires auth)
-  AGENT_NAME=claude                             (default)
-  AGENT_ROLE=AI Assistant                       (default)
-  CLAUDE_MODEL=claude-opus-4-6                 (default)
-  POLL_INTERVAL=2                               (seconds, default)
-  CONTEXT_MESSAGES=20                           (messages to include as context)
-  DEBUG=0                                       (set to 1 for verbose output)
+  AGENTBRIDGE_URL=http://localhost:7890   (default)
+  AGENTBRIDGE_TOKEN=...                   (if server requires auth)
+  AGENT_NAME=ai-assistant                 (default)
+  AGENT_ROLE=AI Assistant                 (default)
+  LLM_MODEL=claude-sonnet-4-6            (default — any Anthropic model ID)
+  POLL_INTERVAL=2                         (seconds, default)
+  CONTEXT_MESSAGES=20                     (messages to include as context)
+  DEBUG=0                                 (set to 1 for verbose output)
 """
 
 from __future__ import annotations
@@ -41,11 +44,11 @@ import anthropic
 # Configuration
 # ---------------------------------------------------------------------------
 
-BRIDGE_URL = os.environ.get("AGENTBRIDGE_URL", "http://172.31.141.155:7890")
+BRIDGE_URL = os.environ.get("AGENTBRIDGE_URL", "http://localhost:7890")
 AGENTBRIDGE_TOKEN = os.environ.get("AGENTBRIDGE_TOKEN", "")
-AGENT_NAME = os.environ.get("AGENT_NAME", "claude")
-AGENT_ROLE = os.environ.get("AGENT_ROLE", "AI Assistant — powered by Claude Opus 4.6")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-6")
+AGENT_NAME = os.environ.get("AGENT_NAME", "ai-assistant")
+AGENT_ROLE = os.environ.get("AGENT_ROLE", "AI Assistant")
+LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-4-6")
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "2"))
 CONTEXT_MESSAGES = int(os.environ.get("CONTEXT_MESSAGES", "20"))
 HEARTBEAT_INTERVAL = 30  # seconds — well within the 4h TTL
@@ -264,16 +267,15 @@ def report_cost_event(input_tokens: int, output_tokens: int) -> None:
         _debug(f"Cost report failed (non-fatal): {exc}")
 
 
-def call_claude(messages: list[dict], thread: str) -> str:
-    """Call Claude API and return the response text."""
+def call_llm(messages: list[dict], thread: str) -> str:
+    """Call the LLM API and return the response text."""
     system = SYSTEM_PROMPT + f"\nCurrent channel: #{thread}"
 
     response = anthropic_client.messages.create(
-        model=CLAUDE_MODEL,
+        model=LLM_MODEL,
         max_tokens=2048,
         system=system,
         messages=messages,
-        thinking={"type": "adaptive"},
     )
 
     # Report usage to AgentBridge cost tracker
@@ -345,10 +347,10 @@ def main() -> None:
                     thread_history = list(context_by_thread[thread])[:-1]
 
                     try:
-                        claude_msgs = build_messages(thread_history, msg)
-                        _debug(f"Sending {len(claude_msgs)} messages to Claude")
+                        llm_msgs = build_messages(thread_history, msg)
+                        _debug(f"Sending {len(llm_msgs)} messages to LLM ({LLM_MODEL})")
 
-                        response_text = call_claude(claude_msgs, thread)
+                        response_text = call_llm(llm_msgs, thread)
 
                         # Reply as DM if the message was a DM to us, otherwise broadcast to thread
                         reply_recipient: str | None = None
@@ -359,7 +361,7 @@ def main() -> None:
                         _log(f"Responded to {sender}: {response_text[:80]}{'...' if len(response_text) > 80 else ''}")
 
                     except anthropic.APIError as exc:
-                        _log(f"Claude API error: {exc}")
+                        _log(f"LLM API error: {exc}")
                         try:
                             post_message(
                                 f"Sorry, I hit an API error: {exc}",

@@ -29,7 +29,7 @@ class RegisterAgentRequest(BaseModel):
 
 
 class HeartbeatRequest(BaseModel):
-    status: Literal["online", "busy", "idle"] = "online"
+    status: Literal["online", "busy", "idle", "needs_input"] = "online"
     working_on: str = Field(default="", max_length=512)
 
 
