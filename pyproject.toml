@@ -30,6 +30,13 @@ redis = [
 claude = [
     "anthropic>=0.40.0",
 ]
+tui = [
+    "textual>=0.70.0",
+]
+ai = [
+    "anthropic>=0.40.0",
+    "textual>=0.70.0",
+]
 
 [project.scripts]
 ab = "agentbridge.cli:cli"

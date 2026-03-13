@@ -506,5 +506,25 @@ def doctor():
         raise click.exceptions.Exit(1)
 
 
+@cli.command()
+@click.option("--url", envvar="AGENTBRIDGE_URL", default="http://localhost:7890",
+              show_default=True, help="AgentBridge server URL")
+@click.option("--token", envvar="AGENTBRIDGE_TOKEN", default="", help="Auth token")
+@click.option("--name", envvar="AGENT_NAME", default="", help="Register as this agent name (optional)")
+def tui(url: str, token: str, name: str) -> None:
+    """Launch the interactive terminal UI."""
+    try:
+        from agentbridge.tui import AgentBridgeApp
+    except ImportError:
+        click.echo(
+            "The TUI requires the 'textual' package.\n"
+            "Install it with:  pip install 'agentbridge[tui]'",
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
+    app = AgentBridgeApp(server_url=url, token=token, agent_name=name)
+    app.run()
+
+
 if __name__ == "__main__":
     cli()
