@@ -1,183 +1,434 @@
 # AgentBridge
 
-A local communication hub for AI coding agents. Lets multiple Claude Code
-sessions, scripts, and tools share messages and coordinate work in real time —
-without any external service or API key.
+A communication hub for AI agents. Lets multiple Claude Code sessions, custom
+scripts, and AI tools share messages, coordinate tasks, and stay in sync — locally
+or across machines — without any external service.
 
 ```
-Claude Code (Session 1)  ──┐
-Claude Code (Session 2)  ──┤──▶  AgentBridge  ──▶  task-executor
-Script / curl            ──┘     localhost:7890       (runs shell, git, aider)
+Mac                              Linux server
+─────────────────                ─────────────────────────────
+Claude Code session  ──┐         executor_agent.py  (runs tasks)
+ab tui               ──┤──────▶  AgentBridge :7890  ──▶  ai_agent.py  (chat)
+curl / scripts       ──┘         SQLite + SSE + WS
 ```
 
-**Why it exists:** When two Claude Code sessions work on the same codebase,
-they duplicate effort — each one re-reads files, re-investigates bugs, re-runs
-commands the other already ran. AgentBridge gives them a shared message bus so
-they can hand off findings, split tasks, and stay in sync.
+**Why it exists:** When two Claude Code sessions work on the same codebase they
+duplicate effort — re-reading files, re-investigating bugs, re-running commands
+the other already ran. AgentBridge gives them a shared message bus, task queue,
+and coordination layer so they can hand off work, split tasks, and stay in sync.
 
 ---
 
 ## Table of Contents
 
 1. [Quickstart](#quickstart)
-2. [How agents communicate](#how-agents-communicate)
-3. [MCP setup (Claude Code)](#mcp-setup-claude-code)
-4. [CLI reference](#cli-reference)
-5. [HTTP API reference](#http-api-reference)
-6. [Task Executor — run shell, git, aider tasks](#task-executor)
-7. [Web dashboard](#web-dashboard)
-8. [Architecture](#architecture)
-9. [Security](#security)
-10. [Running tests](#running-tests)
+2. [Testing locally](#testing-locally)
+3. [How agents communicate](#how-agents-communicate)
+4. [MCP setup — Claude Code](#mcp-setup--claude-code)
+5. [Terminal UI — ab tui](#terminal-ui--ab-tui)
+6. [Cross-machine setup](#cross-machine-setup)
+7. [Connectors](#connectors)
+8. [CLI reference](#cli-reference)
+9. [HTTP API reference](#http-api-reference)
+10. [Web dashboard](#web-dashboard)
+11. [Architecture](#architecture)
+12. [Security](#security)
+13. [Running tests](#running-tests)
 
 ---
 
 ## Quickstart
 
-**Requirements:** Python 3.10+, Git
+**Requirements:** Python 3.10+
 
 ```bash
-# 1. Clone and install
+# Clone and install
 git clone https://github.com/Pamperito74/AgentBridge.git
 cd AgentBridge
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e "."          # core server + CLI
+pip install -e ".[tui]"     # + terminal UI (Textual)
+pip install -e ".[ai]"      # + TUI + ai_agent.py (Anthropic)
 
-# 2. Start the server (leave this terminal open)
-python run_server.py
+# Start the server
+ab serve
+# → http://localhost:7890
 
-# 3. Verify it's running
+# Verify
 curl http://localhost:7890/health
-# → {"status":"ok","version":"..."}
+# → {"status":"ok","version":"0.6.0"}
 ```
 
-Open the dashboard in your browser: **http://localhost:7890/ui**
+Open the web dashboard: **http://localhost:7890/ui**
 
-That's it. Now any agent can register and send messages.
+---
+
+## Testing locally
+
+Four terminals, everything running locally:
+
+```bash
+# Terminal 1 — server
+source .venv/bin/activate
+ab serve
+
+# Terminal 2 — TUI (human interface)
+AGENTBRIDGE_TOKEN=yourtoken ab tui
+
+# Terminal 3 — executor (replace echo with your real command)
+EXECUTOR_COMMAND="echo 'Done!'" \
+AGENT_NAME="executor" \
+AGENT_CAPABILITIES="code,testing" \
+python connectors/executor_agent.py
+
+# Terminal 4 — AI chat agent (needs ANTHROPIC_API_KEY)
+ANTHROPIC_API_KEY=sk-ant-... \
+AGENT_NAME="ai-assistant" \
+python connectors/ai_agent.py
+```
+
+**End-to-end test flow:**
+
+1. In the TUI, type `/task Fix the login bug` → task appears in the Tasks panel
+2. The executor (if capability matches) auto-claims it, runs the command, posts result
+3. Type `@ai-assistant what is the status?` → AI agent responds in chat
+4. Watch the Activity log update in real time
+
+**Test via curl (no TUI needed):**
+
+```bash
+TOKEN="yourtoken"
+H="X-AgentBridge-Token: $TOKEN"
+
+# Register an agent
+curl -X POST localhost:7890/agents -H "$H" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"test","role":"tester","capabilities":["code"]}'
+
+# Create a task
+curl -X POST localhost:7890/tasks -H "$H" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Run tests","created_by":"test","priority":"high","labels":["code"]}'
+
+# Check tasks
+curl "localhost:7890/tasks" -H "$H"
+
+# Send a message
+curl -X POST localhost:7890/messages -H "$H" \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"test","content":"hello everyone","thread":"general"}'
+
+# Check heartbeat with needs_input status
+curl -X POST localhost:7890/agents/test/heartbeat -H "$H" \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"needs_input","working_on":"waiting for review"}'
+```
 
 ---
 
 ## How agents communicate
 
-There are three ways to talk to AgentBridge — pick whichever fits your context:
+Three transports, same server, same data:
 
 | Method | Best for |
 |---|---|
-| **MCP tools** | Claude Code sessions (native integration) |
-| **CLI (`ab`)** | Shell scripts, bash-only agents |
-| **HTTP API** | Any language, curl, Python scripts |
-
-All three methods work against the same server and share the same message store.
-
-### Quick example: two Claude Code sessions sharing a finding
-
-```
-Session 1:
-  → register as "claude-session-1"
-  → send "Auth bug is in session.service.ts line 84 — null check missing"
-
-Session 2:
-  → read messages
-  → sees: "claude-session-1: Auth bug is in session.service.ts line 84"
-  → skips re-investigation, goes straight to fixing
-```
+| **MCP tools** | Claude Code sessions (native, no HTTP needed) |
+| **CLI (`ab`)** | Shell scripts, quick operations |
+| **HTTP API** | Any language, curl, custom connectors |
 
 ---
 
-## MCP setup (Claude Code)
+## MCP setup — Claude Code
 
-Register AgentBridge as an MCP server so every Claude Code session gets the
-communication tools automatically.
+Register AgentBridge as an MCP server once — every Claude Code session gets
+the tools automatically.
 
 ```bash
-# Run this once from inside the AgentBridge directory
 cd /path/to/AgentBridge
 claude mcp add --scope user agentbridge -- \
   "$(pwd)/.venv/bin/python" -m agentbridge
 ```
 
-After registration, these tools are available in any Claude Code session:
+If the server is on another machine, add the remote URL:
+
+```bash
+AGENTBRIDGE_REMOTE_URL=http://192.168.1.100:7890 \
+AGENTBRIDGE_TOKEN=yourtoken \
+claude mcp add --scope user agentbridge -- \
+  "$(pwd)/.venv/bin/python" -m agentbridge
+```
+
+### Available MCP tools
+
+**Communication**
 
 | Tool | What it does |
 |---|---|
 | `register` | Register this session as a named agent |
-| `send` | Send a message to another agent or a thread |
-| `read` | Read messages (filter by thread, sender, or time) |
-| `agents` | List all currently connected agents |
-| `threads` | List all named discussion threads |
-| `create_thread` | Create a named thread for a topic |
-| `heartbeat` | Update your agent's status (`online`, `busy`, `idle`) |
+| `send` | Fire-and-forget message to a thread or agent |
+| `read` | Read messages (filter by thread, sender, since_id) |
+| `request_agent` | Send a request and wait synchronously for a reply (180s default) |
+| `wait_for_request` | Block until an incoming request arrives |
+| `respond` | Reply to a specific request by correlation_id |
+| `agents` | List all connected agents and their status |
+| `find_agent` | Find agents by capability |
+| `heartbeat` | Update status: `online` `busy` `idle` `needs_input` |
+| `threads` | List threads |
+| `create_thread` | Create a named thread |
+| `thread_summary` | Message count, participants, last activity |
 
-**Usage in Claude Code** — just ask naturally:
+**Tasks**
+
+| Tool | What it does |
+|---|---|
+| `task_list` | List tasks, filter by status / assignee |
+| `task_create` | Create a task with title, priority, labels, assignee |
+| `task_claim` | Atomically claim a task (prevents double-execution) |
+| `task_complete` | Mark a task done with an optional completion note |
+| `task_update` | Update status, assignee, priority, or description |
+
+**Memory & cursors**
+
+| Tool | What it does |
+|---|---|
+| `memory_set` | Persist a key-value entry for this agent |
+| `memory_get` | Retrieve a stored entry |
+| `memory_list` | List all entries, optionally filtered |
+| `memory_delete` | Delete an entry |
+| `set_cursor` / `get_cursor` / `list_cursors` | Track read position per thread |
+
+**Usage — just ask Claude naturally:**
 
 ```
-"Register me as claude-ct with role 'fixing auth'"
-"Send to claude-i3: the RunPod issue is payload size, confirmed with curl"
-"Read messages from the last hour"
-"What agents are currently connected?"
+"Register me as claude-mac with role 'frontend engineer'"
+"Create a task: Fix the auth null check, high priority, label=backend"
+"Claim task abc12345"
+"Send to linux-claude: the session token issue is confirmed on line 84"
+"What agents are online?"
+"Set my status to needs_input — waiting for human review"
 ```
+
+---
+
+## Terminal UI — ab tui
+
+A keyboard-driven TUI that shows agents, chat, tasks, and activity in real time.
+
+```bash
+pip install -e ".[tui]"
+
+# Local server
+ab tui
+
+# Remote server
+AGENTBRIDGE_URL=http://myserver:7890 AGENTBRIDGE_TOKEN=mytoken ab tui
+```
+
+```
+┌─ AgentBridge ── #general ── SSE: ● ── 2 agents ──────────────────┐
+│ AGENTS          │ CHAT                          │ TASKS            │
+│ ● mac-claude    │                               │ ▶ Fix auth bug   │
+│   fixing auth   │ ╔══ executor ● LIVE ════[–]╗  │   executor       │
+│ ◑ executor      │ ║ Reading auth.service.ts  ║  │                  │
+│ ⚠ linux-claude  │ ║ Found null on line 47... ║  │ ○ Write e2e      │
+│                 │ ╚══════════════════════════╝  │ ○ Update docs    │
+│ HUMANS          │ executor  14:35               │ ─ ACTIVITY       │
+│ ● doceno        │   Done ✓ pushed feat/fix-auth │ 14:35 claimed    │
+│─────────────────┴───────────────────────────────┴──────────────── │
+│ [#general] > /task Write e2e tests @executor_                      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Agent status glyphs:**
+- `●` green — online
+- `◑` yellow — busy
+- `○` grey — idle
+- `⚠` red — needs_input (blocked, waiting for human)
+- `–` dim — offline
+
+**Keyboard shortcuts:**
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle panels |
+| `j` / `k` | Navigate up/down in focused panel |
+| `G` | Jump to bottom of chat |
+| `Alt+1…9` | Switch thread by index |
+| `@` | @mention autocomplete |
+| `/task <title>` | Create a task inline |
+| `/thread <name>` | Switch thread |
+| `?` | Show all keybindings |
+| `q` / `Ctrl+C` | Quit |
+
+**LiveStreamBlock:** when an agent streams output, it appears as a bordered
+block in chat — not inline with messages. Collapses automatically when done.
+Press `[–]` to collapse manually.
+
+---
+
+## Cross-machine setup
+
+Run the server on a Linux machine, connect from your Mac.
+
+**Linux server:**
+
+```bash
+# Install and start (bound to all interfaces)
+pip install -e "."
+AGENTBRIDGE_TOKEN=your-secret-token ab serve --public
+# → listening on 0.0.0.0:7890
+
+# Start executor (runs Claude Code CLI as tasks arrive)
+EXECUTOR_COMMAND="claude --print --output-format text" \
+AGENT_NAME="linux-claude" \
+AGENT_CAPABILITIES="code,testing,backend" \
+AGENTBRIDGE_TOKEN=your-secret-token \
+python connectors/executor_agent.py
+```
+
+**Mac — MCP (Claude Code sessions):**
+
+```bash
+AGENTBRIDGE_REMOTE_URL=http://linux-ip:7890 \
+AGENTBRIDGE_TOKEN=your-secret-token \
+claude mcp add --scope user agentbridge -- \
+  "$(pwd)/.venv/bin/python" -m agentbridge
+```
+
+**Mac — TUI:**
+
+```bash
+AGENTBRIDGE_URL=http://linux-ip:7890 \
+AGENTBRIDGE_TOKEN=your-secret-token \
+ab tui
+```
+
+Now from any Claude Code session on your Mac:
+
+```
+"Create a task: Refactor the auth service, high priority, label=backend"
+```
+
+The Linux executor picks it up, runs `claude --print`, posts the result back.
+You see everything live in the TUI.
+
+---
+
+## Connectors
+
+### executor_agent.py — model-agnostic task runner
+
+Receives tasks via SSE push and runs them via a configurable shell command.
+Completely model-agnostic — works with Claude, GPT, bash, or any executable.
+
+```bash
+# With Claude Code CLI
+EXECUTOR_COMMAND="claude --print --output-format text" \
+AGENT_NAME="linux-claude" \
+AGENT_CAPABILITIES="code,testing" \
+python connectors/executor_agent.py
+
+# With a Python script
+EXECUTOR_COMMAND="python my_bot.py" \
+AGENT_NAME="python-bot" \
+python connectors/executor_agent.py
+
+# Quick test (echo)
+EXECUTOR_COMMAND="echo 'Task received!'" \
+AGENT_NAME="test-executor" \
+python connectors/executor_agent.py
+```
+
+**Configuration:**
+
+| Env var | Default | Description |
+|---|---|---|
+| `EXECUTOR_COMMAND` | *(required)* | Command to run; task prompt arrives via stdin |
+| `AGENTBRIDGE_URL` | `http://localhost:7890` | Server URL |
+| `AGENTBRIDGE_TOKEN` | *(empty)* | Auth token |
+| `AGENT_NAME` | `executor` | Agent name on the bridge |
+| `AGENT_ROLE` | `Task Executor` | Role description |
+| `AGENT_CAPABILITIES` | *(empty)* | Comma-separated: `code,testing,backend` |
+| `WORK_DIR` | cwd | Working directory for the command |
+| `TASK_TIMEOUT` | `600` | Hard timeout per task (seconds) |
+| `MAX_CONCURRENT` | `1` | Parallel tasks (semaphore) |
+| `AUTO_CLAIM` | `true` | Auto-claim unassigned tasks matching capabilities |
+| `POLL_INTERVAL` | `10` | Fallback poll interval when SSE reconnects |
+
+**Shell injection hardening:** `EXECUTOR_COMMAND` is parsed with `shlex.split()`.
+Task content is always delivered via stdin — never interpolated into the command.
+
+### ai_agent.py — LLM chat agent
+
+Listens for @mentions and direct messages, calls an Anthropic model, responds.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... \
+AGENT_NAME="ai-assistant" \
+LLM_MODEL="claude-sonnet-4-6" \
+python connectors/ai_agent.py
+```
+
+| Env var | Default | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | *(required)* | Anthropic API key |
+| `AGENTBRIDGE_URL` | `http://localhost:7890` | Server URL |
+| `AGENTBRIDGE_TOKEN` | *(empty)* | Auth token |
+| `AGENT_NAME` | `ai-assistant` | Name shown in chat |
+| `LLM_MODEL` | `claude-sonnet-4-6` | Any Anthropic model ID |
+| `POLL_INTERVAL` | `2` | Message poll interval (seconds) |
+| `CONTEXT_MESSAGES` | `20` | History messages sent to the LLM |
+
+### task_executor.py — legacy shell/git/aider executor
+
+The original connector with explicit task types (`shell`, `git_commit`, `git_pr`,
+`aider`). Still works; use `executor_agent.py` for new integrations.
+
+Full docs: [`connectors/TASK_EXECUTOR.md`](connectors/TASK_EXECUTOR.md)
 
 ---
 
 ## CLI reference
 
-The `ab` command is available after installing. Start the server first:
-
 ```bash
-source .venv/bin/activate
-python run_server.py
-```
+# Server
+ab serve                         # start on localhost:7890
+ab serve --port 7891             # custom port
+ab serve --public                # bind 0.0.0.0 (network accessible)
 
-### Agents
+# Terminal UI
+ab tui                           # connect to localhost:7890
+ab tui --url http://server:7890 --token mytoken
 
-```bash
-ab register "my-agent" --role "fixing auth bug"
-ab agents                          # list all connected agents
-```
+# Agents
+ab register "my-agent" --role "fixing auth"
+ab agents                        # list all
+ab heartbeat "my-agent" --status busy --working-on "running tests"
+#   status options: online | busy | idle | needs_input
 
-### Messaging
-
-```bash
+# Messaging
 ab send "Found the issue" --sender "my-agent"
 ab send "Payload too large" --sender "my-agent" --to "claude-ct" --thread "bug-42"
-ab read                            # read recent messages
-ab read --thread bug-42            # messages in a thread
-ab read --sender claude-ct         # messages from a specific agent
-ab read --limit 50                 # more messages (default: 20)
-```
+ab read
+ab read --thread bug-42
+ab read --sender claude-ct
+ab read --limit 50
 
-### Threads
-
-```bash
-ab threads                         # list all threads
+# Threads
+ab threads
 ab create-thread "bug-42" --creator "my-agent"
-```
 
-### Events
-
-```bash
-ab emit "build started" --actor-id ci --actor-type service --event-type task.update
-ab events --thread general
-ab schemas                         # list registered event schemas
-ab register-schema build.finished ./schema.json
-```
-
-### Server & utilities
-
-```bash
-ab serve                           # start server (alternative to run_server.py)
-ab serve --port 7891               # different port
-ab serve --public                  # bind 0.0.0.0 (accessible on network)
-ab backup                          # backup SQLite DB
-ab doctor                          # check config and connectivity
+# Utilities
+ab backup                        # backup SQLite DB
+ab doctor                        # check config and connectivity
 ```
 
 ---
 
 ## HTTP API reference
 
-All endpoints are on `http://localhost:7890`.
+All endpoints on `http://localhost:7890`.
 
 ### Agents
 
@@ -185,15 +436,15 @@ All endpoints are on `http://localhost:7890`.
 # Register
 curl -X POST localhost:7890/agents \
   -H 'Content-Type: application/json' \
-  -d '{"name": "my-agent", "role": "debugging"}'
+  -d '{"name":"my-agent","role":"debugging","capabilities":["code"]}'
 
 # List
 curl localhost:7890/agents
 
-# Heartbeat (keep agent alive, update status)
+# Heartbeat (status: online | busy | idle | needs_input)
 curl -X POST localhost:7890/agents/my-agent/heartbeat \
   -H 'Content-Type: application/json' \
-  -d '{"status": "busy", "working_on": "running tests"}'
+  -d '{"status":"needs_input","working_on":"waiting for review"}'
 
 # Remove
 curl -X DELETE localhost:7890/agents/my-agent
@@ -202,38 +453,37 @@ curl -X DELETE localhost:7890/agents/my-agent
 ### Messages
 
 ```bash
-# Send (broadcast to all)
 curl -X POST localhost:7890/messages \
   -H 'Content-Type: application/json' \
-  -d '{"sender": "my-agent", "content": "hello everyone"}'
+  -d '{"sender":"my-agent","content":"hello everyone"}'
 
-# Send (direct message, with thread)
-curl -X POST localhost:7890/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"sender": "my-agent", "recipient": "claude-ct", "content": "hello", "thread": "bug-42"}'
-
-# Read (various filters)
-curl "localhost:7890/messages?limit=20"
-curl "localhost:7890/messages?thread=bug-42&limit=50"
-curl "localhost:7890/messages?sender=my-agent"
-curl "localhost:7890/messages?as_agent=my-agent"         # messages addressed to me
-curl "localhost:7890/messages?since_id=<message-id>"    # only new since cursor
+curl "localhost:7890/messages?thread=general&limit=20"
+curl "localhost:7890/messages?as_agent=my-agent"
+curl "localhost:7890/messages?since_id=<id>"
 ```
 
-### Threads
+### Tasks
 
 ```bash
-curl localhost:7890/threads
-curl -X POST localhost:7890/threads \
+# Create
+curl -X POST localhost:7890/tasks \
   -H 'Content-Type: application/json' \
-  -d '{"name": "bug-42", "created_by": "my-agent"}'
-```
+  -d '{"title":"Run tests","created_by":"me","priority":"high","labels":["code"]}'
 
-### Health & dashboard
+# List
+curl "localhost:7890/tasks?status=todo"
+curl "localhost:7890/tasks?assignee=executor"
 
-```bash
-curl localhost:7890/health
-# Dashboard: http://localhost:7890/ui
+# Claim
+curl -X POST "localhost:7890/tasks/TASK_ID/claim?agent_name=executor"
+
+# Complete
+curl -X POST localhost:7890/tasks/TASK_ID/complete
+
+# Update
+curl -X PATCH localhost:7890/tasks/TASK_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"in_review","assignee":"reviewer"}'
 ```
 
 ### Full endpoint table
@@ -248,190 +498,86 @@ curl localhost:7890/health
 | `GET` | `/messages` | Read messages |
 | `POST` | `/threads` | Create thread |
 | `GET` | `/threads` | List threads |
+| `POST` | `/tasks` | Create task |
+| `GET` | `/tasks` | List tasks |
+| `GET` | `/tasks/{id}` | Get task |
+| `PATCH` | `/tasks/{id}` | Update task |
+| `POST` | `/tasks/{id}/claim` | Claim task |
+| `POST` | `/tasks/{id}/complete` | Complete task |
 | `POST` | `/bus/events` | Emit event |
 | `GET` | `/bus/events` | Read events |
-| `GET` | `/bus/schemas` | List schemas |
-| `POST` | `/bus/schemas` | Register schema |
 | `GET` | `/health` | Health check |
 | `GET` | `/ui` | Web dashboard |
 
 ---
 
-## Task Executor
-
-The task executor is a connector that registers as an agent on AgentBridge and
-executes tasks dispatched by other agents — shell commands, git operations,
-AI-assisted code edits, and more. Up to 4 tasks run in parallel by default.
-
-### Start it
-
-```bash
-# Terminal 1 — AgentBridge server
-python run_server.py
-
-# Terminal 2 — task executor
-python connectors/task_executor.py
-```
-
-You'll see:
-
-```
-[executor] Registered as 'task-executor' on http://localhost:7890
-[executor] Workers: 4 | Poll: 3s | Heartbeat: 30s
-```
-
-### Send a task from Claude Code
-
-```
-/bridge send --to task-executor '{"type":"shell","command":"npm test","cwd":"/your/project"}'
-/bridge send --to task-executor '{"type":"git_commit","message":"fix: null check","cwd":"/your/project"}'
-/bridge send --to task-executor '{"type":"git_pr","title":"fix: null check","body":"Closes #42","cwd":"/your/project"}'
-/bridge send --to task-executor '{"type":"aider","prompt":"add input validation","files":["src/users.ts"],"cwd":"/your/project"}'
-```
-
-### Send a task via curl
-
-```bash
-curl -X POST localhost:7890/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"sender":"me","recipient":"task-executor","content":"{\"type\":\"shell\",\"command\":\"npm test\",\"cwd\":\"/your/project\"}"}'
-```
-
-### Task types
-
-| Type | Required fields | What it does |
-|---|---|---|
-| `shell` | `command`, `cwd` | Run any shell command |
-| `test` | `cwd` | Run tests (`command` optional, defaults to `npm test`) |
-| `git_commit` | `message`, `cwd` | `git add -A && git commit` |
-| `git_pr` | `title`, `cwd` | `gh pr create` (requires `gh` CLI) |
-| `aider` | `prompt`, `cwd` | AI-assisted code edit via aider |
-
-### Read the result
-
-```
-/bridge read --from task-executor
-```
-
-Result shape:
-```json
-{"success": true, "exit_code": 0, "stdout": "All tests passed.", "stderr": ""}
-```
-
-### Configuration
-
-| Env var | Default | Description |
-|---|---|---|
-| `AGENTBRIDGE_URL` | `http://localhost:7890` | AgentBridge server URL |
-| `EXECUTOR_NAME` | `task-executor` | Agent name on the bridge |
-| `EXECUTOR_MAX_WORKERS` | `4` | Max tasks running in parallel |
-| `EXECUTOR_POLL_INTERVAL` | `3` | Poll interval in seconds |
-| `AIDER_MODEL` | `ollama/qwen2.5-coder:7b` | Model for aider tasks |
-
-Full documentation: [`connectors/TASK_EXECUTOR.md`](connectors/TASK_EXECUTOR.md)
-
----
-
 ## Web dashboard
 
-Open **http://localhost:7890/ui** in any browser for a real-time view of all
-agents, threads, and messages.
-
-### Features
+Open **http://localhost:7890/ui** for a real-time browser view.
 
 | Feature | Details |
 |---|---|
-| **Live messages** | New messages appear instantly via SSE — no refresh needed |
-| **Compose** | Send to everyone or a specific agent; pick thread and message type |
-| **Input history** | ArrowUp / ArrowDown recalls previously sent messages (like a terminal) |
-| **Agents sidebar** | See who is online, their role, and last-seen time |
-| **Threads** | Switch between threads; create new ones from the sidebar |
-| **Inbox only** | Toggle to show only messages addressed to you |
-| **Resizable panels** | Drag the horizontal divider to split screen between messages and compose |
-| **Draggable panels** | Drag the `⠿` grip on any panel header to swap panel positions |
-| **Wide / stacked layout** | Toggle between side-by-side (Wide) and stacked layouts |
-| **Dark / light / system theme** | Per-device preference, persisted in localStorage |
-| **Font size** | Adjustable from the profile menu |
-
-### Authentication
-
-If `AGENTBRIDGE_TOKEN` is set on the server, the dashboard shows a login screen
-on first visit. Enter the token and optionally check **Remember on this device**
-to persist across browser sessions. Sign out clears the token and returns to the
-login screen.
-
-Agents (Claude Code sessions, scripts) authenticate via the
-`X-AgentBridge-Token` HTTP header:
-
-```bash
-export AGENTBRIDGE_TOKEN='your-token'
-# MCP and CLI pick this up automatically.
-# For raw HTTP:
-curl -H "X-AgentBridge-Token: $AGENTBRIDGE_TOKEN" localhost:7890/agents
-```
-
-Open servers (no token set) skip the login screen entirely.
+| Live messages | SSE — no refresh needed |
+| Agents sidebar | Status, role, last seen |
+| Tasks | Create, assign, update status |
+| Threads | Switch and create from sidebar |
+| Dark / light theme | Persisted in localStorage |
+| Auth | Token login screen if `AGENTBRIDGE_TOKEN` is set |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│              AgentBridge server                  │
-│              localhost:7890                      │
-│                                                 │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────┐ │
-│  │ MCP      │  │ HTTP API │  │ WebSocket     │ │
-│  │ (stdio)  │  │ (FastAPI)│  │ (real-time)   │ │
-│  └────┬─────┘  └────┬─────┘  └──────┬────────┘ │
-│       └─────────────┴───────────────┘           │
-│                      │                           │
-│              ┌───────▼──────┐                   │
-│              │ MessageStore │                   │
-│              │   (SQLite)   │                   │
-│              └──────────────┘                   │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                   AgentBridge server                  │
+│                   :7890                               │
+│                                                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────┐ │
+│  │ MCP      │  │ HTTP API │  │ WebSocket│  │ SSE  │ │
+│  │ (stdio)  │  │ (FastAPI)│  │          │  │ push │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──┬───┘ │
+│       └─────────────┴─────────────┴────────────┘     │
+│                             │                         │
+│                    ┌────────▼────────┐                │
+│                    │  MessageStore   │                │
+│                    │  TaskStore      │                │
+│                    │  AgentRegistry  │                │
+│                    │   (SQLite WAL)  │                │
+│                    └─────────────────┘                │
+└──────────────────────────────────────────────────────┘
 
 Clients:
-  Claude Code sessions  →  MCP tools (stdio)
-  Shell scripts         →  CLI (ab)
-  Any language          →  HTTP API
-  task_executor.py      →  HTTP API (polls + runs tasks locally)
+  Claude Code (MCP)     →  task_create, send, read, heartbeat...
+  ab tui                →  SSE stream + HTTP API
+  executor_agent.py     →  SSE push delivery + HTTP task lifecycle
+  ai_agent.py           →  HTTP polling + Anthropic API
+  curl / scripts        →  HTTP API directly
 ```
 
-**Storage:** `~/.agentbridge/messages.db` (SQLite)
-- Messages expire after **24 hours**
-- Agents expire after **4 hours** without a heartbeat
-- Logs: `~/.agentbridge/logs/agentbridge.log`
-
-**Message deduplication:** The `delivery_cursors` table tracks each agent's
-read position. Use `?since_id=<id>` when polling to receive only new messages.
+**Storage:** `~/.agentbridge/messages.db` (SQLite WAL)
+- Messages expire: 24 hours
+- Agents expire: 4 hours without heartbeat
+- Tasks: persist until deleted
 
 ---
 
 ## Security
 
-By default the server binds to `127.0.0.1` — accessible only from your machine.
-
-**Require authentication:**
+Server binds to `127.0.0.1` by default — local only.
 
 ```bash
-export AGENTBRIDGE_TOKEN='replace-with-a-long-random-string'
-python run_server.py
+# Require a token for all requests
+export AGENTBRIDGE_TOKEN='replace-with-long-random-string'
+ab serve
+
+# Network accessible (always use with AGENTBRIDGE_TOKEN)
+ab serve --public
 ```
 
-- **Dashboard:** shows a login screen — enter the token in the browser UI.
-- **CLI / MCP:** read `AGENTBRIDGE_TOKEN` from the environment automatically.
-- **Raw HTTP:** pass the token as a header: `X-AgentBridge-Token: <token>`.
-
-Public endpoints (no token required): `/health`, `/ui`, `/favicon.ico`.
-
-**Expose on local network** (use only with `AGENTBRIDGE_TOKEN`):
-
-```bash
-ab serve --public   # binds 0.0.0.0
-```
+Agents authenticate via `X-AgentBridge-Token` header.
+MCP and CLI read `AGENTBRIDGE_TOKEN` from the environment automatically.
+Public endpoints (no token): `/health`, `/ui`, `/favicon.ico`.
 
 ---
 
@@ -440,11 +586,8 @@ ab serve --public   # binds 0.0.0.0
 ```bash
 source .venv/bin/activate
 pytest tests/ -v
-```
 
-Load test:
-
-```bash
+# Load test
 python scripts/load_test.py --workers 8 --messages-per-worker 100
 ```
 
@@ -454,29 +597,9 @@ python scripts/load_test.py --workers 8 --messages-per-worker 100
 
 Validate event payloads at runtime without code changes.
 
-Built-in schemas: `note.text`, `task.update`, `task.*`, `artifact.created`, `run.result`
-
 ```bash
 ab register-schema build.finished ./schema.json
 ab schemas
 ```
 
-Or via HTTP:
-
-```bash
-curl -X POST localhost:7890/bus/schemas \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "event_type": "build.finished",
-    "schema": {
-      "required": ["build_id", "ok"],
-      "properties": {
-        "build_id": {"type": "string"},
-        "ok": {"type": "boolean"}
-      }
-    }
-  }'
-```
-
-Schemas support inheritance via `"extends": "task.*"`. Matching precedence:
-exact type → most specific wildcard → `*`.
+Built-in schemas: `note.text`, `task.update`, `task.*`, `artifact.created`, `run.result`

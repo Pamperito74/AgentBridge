@@ -1,5 +1,14 @@
 # Task Executor Connector
 
+> **Deprecated (v0.5)** — `task_executor.py` is superseded by `executor_agent.py`.
+> New deployments should use `executor_agent.py` which adds SSE push delivery,
+> asyncio subprocess isolation, stale-claim recovery, concurrency limiting, and
+> model-agnostic execution via a configurable `EXECUTOR_COMMAND`.
+> See [README.md](../README.md#executor-agent) for the current setup guide.
+> This document is kept for reference until `task_executor.py` is removed in v0.7.
+
+---
+
 The task executor is a local agent that sits alongside AgentBridge and executes
 shell commands, git operations, and AI coding tasks on behalf of other agents.
 Any Claude Code session (or any script) can send it a task and get the result
