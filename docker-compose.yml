@@ -1,26 +1,28 @@
 version: "3.9"
-
 services:
   agentbridge:
     build: .
     ports:
-      - "7890:7890"
-    volumes:
-      - agentbridge-data:/data
+      - "4000:4000"
+    env_file:
+      - .env
     environment:
-      # Required: set a strong token to protect the API
-      AGENTBRIDGE_TOKEN: ${AGENTBRIDGE_TOKEN:-}
-      # Optional: swap in Redis pub/sub for multi-instance deployments
-      # AGENTBRIDGE_REDIS_URL: redis://redis:6379/0
+      - PORT=4000
+      - NODE_ENV=production
+    volumes:
+      - agentbridge_data:/app/data
     restart: unless-stopped
-
-  # Uncomment to enable Redis pub/sub (multi-instance / horizontal scale)
-  # redis:
-  #   image: redis:7-alpine
-  #   restart: unless-stopped
-  #   volumes:
-  #     - redis-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  agentbridge-data:
-  # redis-data:
+  agentbridge_data:

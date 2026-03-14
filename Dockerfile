@@ -1,21 +1,32 @@
-FROM python:3.12-slim
-
+FROM node:20-alpine AS base
 WORKDIR /app
 
-# Install build tools for any C extensions
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json* ./
+RUN npm ci
 
-COPY pyproject.toml README.md ./
-COPY src/ ./src/
+COPY tsconfig.json ./
+COPY src ./src
+COPY public ./public
+RUN npm run build
 
-RUN pip install --no-cache-dir -e .
+# Production image
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=4000
 
-# Data directory — mount a volume here for persistence
-RUN mkdir -p /data
-ENV AGENTBRIDGE_DB_PATH=/data/messages.db
+# Create data directory and drop to non-root user
+RUN mkdir -p /app/data && chown -R node:node /app
+USER node
 
-EXPOSE 7890
+COPY --from=base --chown=node:node /app/package.json /app/package.json
+COPY --from=base --chown=node:node /app/node_modules /app/node_modules
+COPY --from=base --chown=node:node /app/dist /app/dist
+COPY --from=base --chown=node:node /app/public /app/public
 
-CMD ["uvicorn", "agentbridge.server:app", "--host", "0.0.0.0", "--port", "7890"]
+EXPOSE 4000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:4000/health || exit 1
+
+CMD ["node", "dist/server/index.js"]
