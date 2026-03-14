@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentBridge — Multi-Agent Coordination Layer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f11; color: #e2e8f0; line-height: 1.6; }
+    a { color: #818cf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { background: #1a1a2e; border-bottom: 1px solid #2d2d44; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.25rem; font-weight: 700; color: #e2e8f0; }
+    header span { font-size: 0.75rem; background: #312e81; color: #a5b4fc; padding: 0.2rem 0.5rem; border-radius: 999px; }
+    nav { display: flex; gap: 1.5rem; margin-left: auto; font-size: 0.9rem; }
+    main { max-width: 860px; margin: 0 auto; padding: 3rem 2rem; }
+    .hero { text-align: center; margin-bottom: 3rem; }
+    .hero h2 { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #818cf8, #c4b5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 1rem; }
+    .hero p { font-size: 1.1rem; color: #94a3b8; max-width: 560px; margin: 0 auto 2rem; }
+    .cta { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 0.7rem 1.5rem; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-primary:hover { background: #4338ca; text-decoration: none; }
+    .btn-ghost { border: 1px solid #334155; color: #94a3b8; }
+    .btn-ghost:hover { border-color: #818cf8; color: #818cf8; text-decoration: none; }
+    .install-box { background: #1e1e2e; border: 1px solid #2d2d44; border-radius: 12px; padding: 1.5rem; margin-bottom: 3rem; }
+    .install-box h3 { font-size: 1rem; font-weight: 600; color: #94a3b8; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .install-box code { font-family: "JetBrains Mono", "Fira Code", Consolas, monospace; font-size: 0.9rem; color: #a5b4fc; display: block; }
+    .install-box .comment { color: #4b5563; }
+    section { margin-bottom: 3rem; }
+    section h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #2d2d44; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .card { background: #1e1e2e; border: 1px solid #2d2d44; border-radius: 10px; padding: 1.25rem; }
+    .card h4 { font-size: 1rem; font-weight: 600; margin-bottom: 0.4rem; color: #c4b5fd; }
+    .card p { font-size: 0.875rem; color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th { text-align: left; padding: 0.6rem 1rem; background: #1e1e2e; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #2d2d44; }
+    td { padding: 0.6rem 1rem; border-bottom: 1px solid #1e2030; color: #cbd5e1; }
+    code { background: #1e1e2e; border: 1px solid #2d2d44; border-radius: 4px; padding: 0.1em 0.4em; font-family: monospace; font-size: 0.85em; color: #a5b4fc; }
+    pre { background: #1e1e2e; border: 1px solid #2d2d44; border-radius: 8px; padding: 1.25rem; overflow-x: auto; margin: 1rem 0; }
+    pre code { background: none; border: none; padding: 0; font-size: 0.875rem; color: #e2e8f0; }
+    footer { text-align: center; padding: 2rem; font-size: 0.8rem; color: #4b5563; border-top: 1px solid #1e1e2e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>AgentBridge</h1>
+  <span>v0.1.0</span>
+  <nav>
+    <a href="#install">Install</a>
+    <a href="#api">API</a>
+    <a href="#websocket">WebSocket</a>
+    <a href="https://github.com/Pamperito74/AgentBridge">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <div class="hero">
+    <h2>Multi-Agent Coordination Layer</h2>
+    <p>Production-ready A2A protocol server. Register agents, create rooms, route messages, coordinate tasks — all secured with API key auth.</p>
+    <div class="cta">
+      <a href="#install" class="btn btn-primary">Get Started</a>
+      <a href="https://github.com/Pamperito74/AgentBridge" class="btn btn-ghost">View on GitHub</a>
+    </div>
+  </div>
+
+  <div id="install" class="install-box">
+    <h3>One-command install</h3>
+    <code><span class="comment"># Docker (recommended)</span></code>
+    <code>curl -fsSL https://raw.githubusercontent.com/Pamperito74/AgentBridge/main/install.sh | bash</code>
+    <br/>
+    <code><span class="comment"># npm</span></code>
+    <code>npm install @darkforgeai/agentbridge</code>
+  </div>
+
+  <section>
+    <h2>Features</h2>
+    <div class="cards">
+      <div class="card">
+        <h4>A2A Protocol</h4>
+        <p>Structured agent-to-agent messaging with thread context, rooms, and broadcast routing.</p>
+      </div>
+      <div class="card">
+        <h4>Bearer Auth</h4>
+        <p>All API routes require a Bearer token. WebSocket connections validated at handshake.</p>
+      </div>
+      <div class="card">
+        <h4>Docker Ready</h4>
+        <p>Non-root image, healthcheck, named volumes, auto-restart — production-hardened out of the box.</p>
+      </div>
+      <div class="card">
+        <h4>MCP Support</h4>
+        <p>Integrated Model Context Protocol server for tool invocation across agents.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="api">
+    <h2>API Reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>GET</code></td><td><code>/health</code></td><td>Health check (no auth)</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/agents</code></td><td>List all registered agents</td></tr>
+        <tr><td><code>POST</code></td><td><code>/api/agents/register</code></td><td>Register or update an agent</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/rooms</code></td><td>List all rooms</td></tr>
+        <tr><td><code>POST</code></td><td><code>/api/rooms</code></td><td>Create a room</td></tr>
+        <tr><td><code>POST</code></td><td><code>/api/rooms/:id/message</code></td><td>Send message to a room</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/tasks</code></td><td>List tasks (filter by <code>?room_id=</code>)</td></tr>
+        <tr><td><code>POST</code></td><td><code>/api/tasks</code></td><td>Create a task</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/threads/:id</code></td><td>Get thread context</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/tools</code></td><td>List available tools</td></tr>
+        <tr><td><code>POST</code></td><td><code>/api/tools/execute</code></td><td>Execute a tool</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/topology</code></td><td>Agent/room graph topology</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="websocket">
+    <h2>WebSocket (A2A)</h2>
+    <p style="margin-bottom:1rem;color:#94a3b8;">Connect to <code>/a2a?agent_id=YOUR_ID&amp;token=YOUR_TOKEN</code> to send and receive A2A messages in real-time.</p>
+    <pre><code>{
+  "protocol": "A2A/1.0",
+  "sender": "agent-alpha",
+  "receiver": "agent-beta",
+  "thread_id": "task-001",
+  "message_type": "task_request",
+  "content": "Analyze the dataset at s3://bucket/data.csv",
+  "timestamp": 1710000000000
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Environment Variables</h2>
+    <table>
+      <thead><tr><th>Variable</th><th>Required</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>AGENTBRIDGE_TOKEN</code></td><td>Yes</td><td>Bearer auth token for API and WebSocket</td></tr>
+        <tr><td><code>PORT</code></td><td>No</td><td>HTTP listen port (default: 4000)</td></tr>
+        <tr><td><code>LOG_LEVEL</code></td><td>No</td><td>Pino log level (default: info)</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<footer>
+  &copy; 2026 DarkForgeAI &mdash; MIT License
+</footer>
+
+</body>
+</html>

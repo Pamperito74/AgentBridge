@@ -1,0 +1,11 @@
+src/
+tests/
+scripts/
+data/
+.github/
+docker-compose.yml
+Dockerfile
+install.sh
+tsconfig.json
+*.test.ts
+node_modules/

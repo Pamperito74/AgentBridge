@@ -13,10 +13,11 @@
     "build": "tsc",
     "start": "node dist/server/index.js",
     "start:mcp": "node dist/mcp/index.js",
-    "test": "tsx --test tests/store.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "seed": "tsx scripts/seed.ts",
     "docker:build": "docker build -t agentbridge .",
-    "docker:run": "docker compose up"
+    "docker:run": "docker compose up",
+    "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
     "node": ">=20"
@@ -39,12 +40,18 @@
     "type": "git",
     "url": "https://github.com/Pamperito74/AgentBridge.git"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "nanoid": "^5.0.7",
-    "ws": "^8.18.0"
+    "pino": "^10.3.1",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

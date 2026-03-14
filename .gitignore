@@ -1,7 +1,4 @@
-__pycache__/
-*.pyc
-.venv/
-*.egg-info/
-.pytest_cache/
-dist/
-build/
+node_modules
+/dist
+/data/state.json
+.env

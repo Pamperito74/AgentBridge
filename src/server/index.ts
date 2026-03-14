@@ -9,7 +9,17 @@ import { AgentBridgeStore } from "../core/store.js";
 import { AgentRouter } from "../core/router.js";
 import { executeTool, listTools } from "../core/tools.js";
 import { paperclipAdapter } from "../core/paperclipAdapter.js";
-import type { A2AMessage, Agent, Task } from "../core/types.js";
+import type { A2AMessage, Task } from "../core/types.js";
+import { logger } from "./logger.js";
+import {
+  registerAgentSchema,
+  createRoomSchema,
+  roomMessageSchema,
+  createTaskSchema,
+  planGoalSchema,
+  executeToolSchema,
+  a2aMessageSchema,
+} from "./validation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 4000);
@@ -17,7 +27,7 @@ const PORT = Number(process.env.PORT ?? 4000);
 // Validate required env vars at startup
 const AGENTBRIDGE_TOKEN = process.env.AGENTBRIDGE_TOKEN;
 if (!AGENTBRIDGE_TOKEN) {
-  console.error("FATAL: AGENTBRIDGE_TOKEN environment variable is not set. Exiting.");
+  logger.fatal("AGENTBRIDGE_TOKEN environment variable is not set. Exiting.");
   process.exit(1);
 }
 
@@ -57,11 +67,12 @@ app.get("/api/agents", (_req, res) => {
 });
 
 app.post("/api/agents/register", (req, res) => {
-  const body = req.body as Partial<Agent>;
-  if (!body.id || !body.name || !body.role) {
-    res.status(400).json({ error: "id, name, and role are required" });
+  const parsed = registerAgentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const body = parsed.data;
   const agent = store.upsertAgent({
     id: body.id,
     name: body.name,
@@ -69,6 +80,7 @@ app.post("/api/agents/register", (req, res) => {
     status: body.status ?? "online",
     meta: body.meta ?? {},
   });
+  logger.info({ agentId: agent.id }, "agent registered");
   res.json(agent);
 });
 
@@ -77,12 +89,13 @@ app.get("/api/rooms", (_req, res) => {
 });
 
 app.post("/api/rooms", (req, res) => {
-  const { name, agents } = req.body as { name?: string; agents?: string[] };
-  if (!name) {
-    res.status(400).json({ error: "name is required" });
+  const parsed = createRoomSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const room = store.createRoom(name, agents ?? []);
+  const room = store.createRoom(parsed.data.name, parsed.data.agents ?? []);
+  logger.info({ roomId: room.id }, "room created");
   res.json(room);
 });
 
@@ -101,15 +114,12 @@ app.post("/api/rooms/:id/message", (req, res) => {
     res.status(404).json({ error: "room not found" });
     return;
   }
-  const { sender, content, thread_id } = req.body as {
-    sender?: string;
-    content?: string;
-    thread_id?: string;
-  };
-  if (!sender || !content) {
-    res.status(400).json({ error: "sender and content are required" });
+  const parsed = roomMessageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { sender, content, thread_id } = parsed.data;
   const message: A2AMessage = {
     protocol: "A2A/1.0",
     sender,
@@ -121,6 +131,7 @@ app.post("/api/rooms/:id/message", (req, res) => {
   };
   store.addMessage(message);
   room.agents.forEach((agentId) => router.sendToAgent(agentId, message));
+  logger.info({ roomId: room.id, sender }, "room message sent");
   res.json(message);
 });
 
@@ -133,12 +144,12 @@ app.get("/api/tools", (_req, res) => {
 });
 
 app.post("/api/tools/execute", async (req, res) => {
-  const { tool, args } = req.body as { tool?: string; args?: Record<string, unknown> };
-  if (!tool) {
-    res.status(400).json({ error: "tool is required" });
+  const parsed = executeToolSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const result = await executeTool(tool, args ?? {});
+  const result = await executeTool(parsed.data.tool, parsed.data.args ?? {});
   res.json(result);
 });
 
@@ -148,11 +159,12 @@ app.get("/api/tasks", (req, res) => {
 });
 
 app.post("/api/tasks", (req, res) => {
-  const { title, description, assignedTo, roomId } = req.body as Partial<Task>;
-  if (!title) {
-    res.status(400).json({ error: "title is required" });
+  const parsed = createTaskSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { title, description, assignedTo, roomId } = parsed.data;
   const task = store.createTask({
     title,
     description,
@@ -160,15 +172,17 @@ app.post("/api/tasks", (req, res) => {
     roomId,
     status: "todo",
   });
+  logger.info({ taskId: task.id }, "task created");
   res.json(task);
 });
 
 app.post("/api/pm/plan", (req, res) => {
-  const { goal } = req.body as { goal?: string };
-  if (!goal) {
-    res.status(400).json({ error: "goal is required" });
+  const parsed = planGoalSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { goal } = parsed.data;
   const agents = store.listAgents();
   const plan = [
     { title: `Scope: ${goal}`, role: "cto" },
@@ -212,16 +226,13 @@ app.get("/api/paperclip/tasks", async (_req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/a2a" });
 
-function isA2AMessage(payload: any): payload is A2AMessage {
-  return payload && payload.protocol === "A2A/1.0" && typeof payload.sender === "string";
-}
-
 wss.on("connection", (socket, req) => {
   const params = new URL(req.url ?? "", "http://localhost").searchParams;
   const agentId = params.get("agent_id");
   const token = params.get("token");
 
   if (!token || token !== AGENTBRIDGE_TOKEN) {
+    logger.warn("WebSocket connection rejected: invalid or missing token");
     socket.close(1008, "Unauthorized: invalid or missing token");
     return;
   }
@@ -231,25 +242,27 @@ wss.on("connection", (socket, req) => {
   }
   router.register(agentId, socket);
   store.updateAgentStatus(agentId, "online");
+  logger.info({ agentId }, "WebSocket connected");
 
   socket.on("message", (data) => {
-    let payload: any;
+    let rawPayload: unknown;
     try {
-      payload = JSON.parse(data.toString());
+      rawPayload = JSON.parse(data.toString());
     } catch {
       socket.send(JSON.stringify({ error: "Invalid JSON" }));
       return;
     }
 
-    if (!isA2AMessage(payload)) {
-      socket.send(JSON.stringify({ error: "Invalid A2A message" }));
+    const parsed = a2aMessageSchema.safeParse(rawPayload);
+    if (!parsed.success) {
+      socket.send(JSON.stringify({ error: "Invalid A2A message", details: parsed.error.flatten() }));
       return;
     }
 
     const message: A2AMessage = {
-      ...payload,
-      thread_id: payload.thread_id ?? nanoid(),
-      timestamp: payload.timestamp ?? Date.now(),
+      ...parsed.data,
+      thread_id: parsed.data.thread_id ?? nanoid(),
+      timestamp: parsed.data.timestamp ?? Date.now(),
     };
 
     store.addMessage(message);
@@ -276,22 +289,23 @@ wss.on("connection", (socket, req) => {
   socket.on("close", () => {
     router.unregister(agentId);
     store.updateAgentStatus(agentId, "offline");
+    logger.info({ agentId }, "WebSocket disconnected");
   });
 });
 
 // Global error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("[error]", err.message, err.stack);
+  logger.error({ err }, "unhandled server error");
   res.status(500).json({ error: "Internal server error" });
 });
 
 server.listen(PORT, () => {
-  console.log(`[agentbridge] running on http://localhost:${PORT}`);
+  logger.info({ port: PORT }, "AgentBridge running");
 });
 
 // Graceful shutdown
 function shutdown() {
-  console.log("[agentbridge] shutting down...");
+  logger.info("shutting down...");
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 10_000);
 }
