@@ -24,11 +24,18 @@ export class AgentBridgeStore {
   async load(): Promise<void> {
     try {
       const raw = await fs.readFile(DATA_PATH, "utf-8");
-      const parsed = JSON.parse(raw) as PersistedState;
-      parsed.agents.forEach((agent) => this.agents.set(agent.id, agent));
-      parsed.rooms.forEach((room) => this.rooms.set(room.id, room));
-      parsed.tasks.forEach((task) => this.tasks.set(task.id, task));
-      Object.entries(parsed.threads).forEach(([id, messages]) => {
+      let parsed: PersistedState;
+      try {
+        parsed = JSON.parse(raw) as PersistedState;
+      } catch {
+        console.warn("[AgentBridgeStore] state.json is corrupt — starting fresh. Backing up to state.json.bak");
+        await fs.writeFile(DATA_PATH + ".bak", raw).catch(() => {});
+        return;
+      }
+      parsed.agents?.forEach((agent) => this.agents.set(agent.id, agent));
+      parsed.rooms?.forEach((room) => this.rooms.set(room.id, room));
+      parsed.tasks?.forEach((task) => this.tasks.set(task.id, task));
+      Object.entries(parsed.threads ?? {}).forEach(([id, messages]) => {
         this.threads.set(id, messages);
       });
     } catch (error) {
@@ -52,8 +59,11 @@ export class AgentBridgeStore {
       tasks: [...this.tasks.values()],
       threads: Object.fromEntries(this.threads.entries()),
     };
-    await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-    await fs.writeFile(DATA_PATH, JSON.stringify(state, null, 2));
+    const dir = path.dirname(DATA_PATH);
+    const tmp = DATA_PATH + ".tmp";
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(tmp, JSON.stringify(state, null, 2));
+    await fs.rename(tmp, DATA_PATH); // atomic on same filesystem
   }
 
   listAgents(): Agent[] {
