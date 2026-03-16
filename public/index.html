@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="deep-dev-dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AgentBridge</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -20,72 +20,80 @@
       </div>
     </div>
 
-    <div class="app">
-      <!-- Left sidebar: agents -->
-      <aside class="sidebar-left">
-        <div class="sidebar-header">
-          <div class="brand">
-            <span class="brand-icon">⬡</span>
-            <span class="brand-name">AgentBridge</span>
-          </div>
+    <div class="app-wrapper">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-brand">
+          <span class="brand-icon">⬡</span>
+          <span class="brand-name">AgentBridge</span>
           <div class="status-dot" id="connection-dot" title="Connecting…"></div>
         </div>
-
-        <div class="sidebar-section">
-          <div class="section-label">Agents <span id="agent-count" class="badge">0</span></div>
-          <div id="agents-list" class="agents-list"></div>
+        <div class="theme-switcher">
+          <button class="theme-btn active" data-theme-val="deep-dev-dark" title="Deep Dev Dark">Dark</button>
+          <button class="theme-btn" data-theme-val="midnight-pro" title="Midnight Pro">Midnight</button>
+          <button class="theme-btn" data-theme-val="soft-cloud" title="Soft Cloud">Cloud</button>
+          <button class="theme-btn" data-theme-val="arctic-minimal" title="Arctic Minimal">Arctic</button>
         </div>
-
-        <div class="sidebar-section">
-          <div class="section-label">Rooms <span id="room-count" class="badge">0</span></div>
-          <div id="rooms-list" class="rooms-list"></div>
-          <button class="btn-ghost btn-sm" id="new-room-btn">+ New room</button>
-        </div>
-
-        <div class="sidebar-footer">
+        <div class="topbar-actions">
           <button class="btn-ghost btn-sm" id="token-btn">🔑 Token</button>
           <button class="btn-ghost btn-sm" id="refresh-btn">↻ Refresh</button>
         </div>
-      </aside>
+      </header>
 
-      <!-- Center: activity feed -->
-      <main class="feed-area">
-        <div class="feed-header">
-          <div class="feed-room-tabs" id="room-tabs"></div>
-        </div>
-
-        <div class="feed-messages" id="messages"></div>
-
-        <div class="feed-compose">
-          <input id="compose-sender" class="compose-sender" placeholder="your-agent-id" />
-          <input id="compose-input" class="compose-message" placeholder="Send a message…" />
-          <button id="compose-send" class="btn-send">Send</button>
-        </div>
-      </main>
-
-      <!-- Right sidebar: tasks -->
-      <aside class="sidebar-right">
-        <div class="sidebar-section">
-          <div class="section-label">
-            Tasks
-            <button class="btn-ghost btn-xs" id="new-task-btn">+</button>
+      <div class="app">
+        <!-- Left sidebar: agents -->
+        <aside class="sidebar-left">
+          <div class="sidebar-section">
+            <div class="section-label">Agents <span id="agent-count" class="badge">0</span></div>
+            <div id="agents-list" class="agents-list"></div>
           </div>
-          <div class="task-columns">
-            <div class="task-col">
-              <div class="task-col-header">Todo</div>
-              <div class="task-col-body" id="tasks-todo"></div>
+
+          <div class="sidebar-section">
+            <div class="section-label">Rooms <span id="room-count" class="badge">0</span></div>
+            <div id="rooms-list" class="rooms-list"></div>
+            <button class="btn-ghost btn-sm" id="new-room-btn">+ New room</button>
+          </div>
+        </aside>
+
+        <!-- Center: activity feed -->
+        <main class="feed-area">
+          <div class="feed-header">
+            <div class="feed-room-tabs" id="room-tabs"></div>
+          </div>
+
+          <div class="feed-messages" id="messages"></div>
+
+          <div class="feed-compose">
+            <input id="compose-sender" class="compose-sender" placeholder="your-agent-id" />
+            <input id="compose-input" class="compose-message" placeholder="Send a message…" />
+            <button id="compose-send" class="btn-send">Send</button>
+          </div>
+        </main>
+
+        <!-- Right sidebar: tasks -->
+        <aside class="sidebar-right">
+          <div class="sidebar-section">
+            <div class="section-label">
+              Tasks
+              <button class="btn-ghost btn-xs" id="new-task-btn">+</button>
             </div>
-            <div class="task-col">
-              <div class="task-col-header active">In Progress</div>
-              <div class="task-col-body" id="tasks-inprogress"></div>
-            </div>
-            <div class="task-col">
-              <div class="task-col-header done">Done</div>
-              <div class="task-col-body" id="tasks-done"></div>
+            <div class="task-columns">
+              <div class="task-col">
+                <div class="task-col-header">Todo</div>
+                <div class="task-col-body" id="tasks-todo"></div>
+              </div>
+              <div class="task-col">
+                <div class="task-col-header active">In Progress</div>
+                <div class="task-col-body" id="tasks-inprogress"></div>
+              </div>
+              <div class="task-col">
+                <div class="task-col-header done">Done</div>
+                <div class="task-col-body" id="tasks-done"></div>
+              </div>
             </div>
           </div>
-        </div>
-      </aside>
+        </aside>
+      </div>
     </div>
 
     <script type="module" src="/app.js"></script>

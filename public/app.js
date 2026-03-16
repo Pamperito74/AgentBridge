@@ -1,3 +1,21 @@
+// ── Theme ─────────────────────────────────────────────────────────────────
+const THEME_KEY = "ab_theme";
+const DEFAULT_THEME = "deep-dev-dark";
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_KEY, theme);
+  document.querySelectorAll(".theme-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.themeVal === theme);
+  });
+}
+
+document.querySelectorAll(".theme-btn").forEach(btn => {
+  btn.addEventListener("click", () => applyTheme(btn.dataset.themeVal));
+});
+
+applyTheme(localStorage.getItem(THEME_KEY) ?? DEFAULT_THEME);
+
 // ── Auth ──────────────────────────────────────────────────────────────────
 const TOKEN_KEY = "ab_token";
 const SENDER_KEY = "ab_sender";
