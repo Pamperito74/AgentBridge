@@ -1,402 +1,377 @@
 // ── Auth ──────────────────────────────────────────────────────────────────
+const TOKEN_KEY = "ab_token";
+const SENDER_KEY = "ab_sender";
 
-const TOKEN_KEY = "agentbridge_token";
-
-function getToken() {
-  return sessionStorage.getItem(TOKEN_KEY) ?? "";
-}
-
-function setToken(t) {
-  sessionStorage.setItem(TOKEN_KEY, t);
-}
-
-function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
-}
+const getToken  = () => sessionStorage.getItem(TOKEN_KEY) ?? "";
+const setToken  = (t) => sessionStorage.setItem(TOKEN_KEY, t);
+const clearToken = () => sessionStorage.removeItem(TOKEN_KEY);
 
 function showAuthModal() {
   return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.id = "auth-overlay";
-    overlay.style.cssText =
-      "position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999";
-
-    const dialog = document.createElement("div");
-    dialog.style.cssText =
-      "background:#1a1d24;border:1px solid #3c424f;border-radius:12px;padding:2rem;min-width:360px;display:flex;flex-direction:column;gap:1rem";
-
-    dialog.innerHTML = `
-      <h2 style="margin:0;font-family:'Fraunces',serif;color:#f7f3ea">AgentBridge Auth</h2>
-      <p style="margin:0;color:#a0a6b0;font-size:0.875rem">Enter your AGENTBRIDGE_TOKEN to connect.</p>
-      <input id="token-input" type="password" placeholder="Bearer token…"
-        style="padding:0.75rem 1rem;border-radius:8px;border:1px solid #3c424f;background:#0c0e12;color:#f7f3ea;font-size:0.875rem;outline:none" />
-      <button id="token-submit"
-        style="padding:0.75rem 1rem;border-radius:8px;border:none;background:#f6b73c;color:#0c0e12;font-weight:700;cursor:pointer;font-size:0.875rem">
-        Connect
-      </button>
-    `;
-
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-
-    const input = dialog.querySelector("#token-input");
-    const btn = dialog.querySelector("#token-submit");
-
+    overlay.classList.remove("hidden");
+    tokenInput.value = "";
+    requestAnimationFrame(() => tokenInput.focus());
     const submit = () => {
-      const val = input.value.trim();
+      const val = tokenInput.value.trim();
       if (!val) return;
       setToken(val);
-      overlay.remove();
+      overlay.classList.add("hidden");
       resolve(val);
     };
-
-    btn.addEventListener("click", submit);
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
-    requestAnimationFrame(() => input.focus());
+    tokenSubmit.onclick = submit;
+    tokenInput.onkeydown = (e) => { if (e.key === "Enter") submit(); };
   });
 }
 
 async function ensureToken() {
-  let token = getToken();
-  if (!token) {
-    token = await showAuthModal();
-  }
-  return token;
+  if (!getToken()) await showAuthModal();
 }
 
-// ── HTTP helper ───────────────────────────────────────────────────────────
+// ── HTTP ──────────────────────────────────────────────────────────────────
+const BASE = "";
 
-async function fetchJSON(path, options = {}) {
+async function api(path, opts = {}) {
   const token = getToken();
   const headers = {
-    ...(options.headers ?? {}),
+    ...(opts.headers ?? {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(BASE + path, { ...opts, headers });
   if (res.status === 401) {
     clearToken();
-    setStatus("Auth error — re-enter token");
     await ensureToken();
-    return fetchJSON(path, options); // retry once
+    return api(path, opts);
   }
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${await res.text().catch(() => "")}`);
-  }
+  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => "")}`);
   return res.json();
 }
 
-// ── DOM refs ──────────────────────────────────────────────────────────────
+const post = (path, body) => api(path, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
-const statusPill = document.getElementById("status-pill");
-const agentCount = document.getElementById("agent-count");
-const roomCount = document.getElementById("room-count");
-const topologyEl = document.getElementById("topology");
-const roomsEl = document.getElementById("rooms");
-const toolsEl = document.getElementById("tools");
-const messagesEl = document.getElementById("messages");
-const roomSelect = document.getElementById("room-select");
+const patch = (path, body) => api(path, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
-const refreshBtn = document.getElementById("refresh");
-const createRoomBtn = document.getElementById("create-room");
-const runToolBtn = document.getElementById("run-tool");
-const sendMessageBtn = document.getElementById("send-message");
+// ── State ─────────────────────────────────────────────────────────────────
+let rooms = [];
+let agents = [];
+let tasks = [];
+let messages = [];
+let activeRoomId = null;
+let lastMsgId = null;
 
-// ── Render helpers ────────────────────────────────────────────────────────
+// ── DOM ───────────────────────────────────────────────────────────────────
+const overlay      = document.getElementById("auth-overlay");
+const tokenInput   = document.getElementById("token-input");
+const tokenSubmit  = document.getElementById("token-submit");
+const connDot      = document.getElementById("connection-dot");
+const agentCount   = document.getElementById("agent-count");
+const roomCount    = document.getElementById("room-count");
+const agentsList   = document.getElementById("agents-list");
+const roomsList    = document.getElementById("rooms-list");
+const roomTabs     = document.getElementById("room-tabs");
+const messagesEl   = document.getElementById("messages");
+const composeSender  = document.getElementById("compose-sender");
+const composeInput   = document.getElementById("compose-input");
+const composeSend    = document.getElementById("compose-send");
+const todoEl         = document.getElementById("tasks-todo");
+const inprogressEl   = document.getElementById("tasks-inprogress");
+const doneEl         = document.getElementById("tasks-done");
+const refreshBtn     = document.getElementById("refresh-btn");
+const newRoomBtn     = document.getElementById("new-room-btn");
+const newTaskBtn     = document.getElementById("new-task-btn");
+const tokenBtn       = document.getElementById("token-btn");
 
-function setStatus(text) {
-  statusPill.textContent = text;
+// ── Helpers ───────────────────────────────────────────────────────────────
+function relTime(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  return `${Math.floor(s/3600)}h ago`;
 }
 
-function relativeTime(ts) {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+function initials(name) {
+  return name.split(/[-_]/).map(p => p[0]).join("").slice(0,2).toUpperCase();
 }
 
-function renderRooms(rooms) {
-  roomsEl.innerHTML = "";
-  roomSelect.innerHTML = '<option value="">— select room —</option>';
-
-  rooms.forEach((room) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <strong>${room.name}</strong>
-      <p class="muted">Agents: ${room.agents.length} • Active tasks: ${room.activeTasks}</p>
-    `;
-    roomsEl.appendChild(card);
-
-    const option = document.createElement("option");
-    option.value = room.id;
-    option.textContent = room.name;
-    roomSelect.appendChild(option);
-  });
-}
-
-function renderTools(tools) {
-  toolsEl.innerHTML = "";
-  tools.forEach((tool) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <strong>${tool.name}</strong>
-      <p class="muted">${tool.description || ""}</p>
-    `;
-    toolsEl.appendChild(card);
-  });
-}
-
-function renderMessages(messages) {
-  messagesEl.innerHTML = "";
-  if (!messages.length) {
-    messagesEl.innerHTML = '<p class="muted" style="padding:1rem">No messages yet.</p>';
+// ── Render: agents ────────────────────────────────────────────────────────
+function renderAgents() {
+  agentCount.textContent = agents.length;
+  agentsList.innerHTML = "";
+  if (!agents.length) {
+    agentsList.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:4px 8px">No agents online</div>';
     return;
   }
-  [...messages].reverse().forEach((msg) => {
-    const card = document.createElement("div");
-    card.className = "card message";
-    const ts = relativeTime(msg.timestamp);
-    const dest = msg.receiver ? `→ ${msg.receiver}` : msg.room_id ? `#${msg.room_id}` : "broadcast";
-    card.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
-        <span><strong>${msg.sender}</strong> <span class="muted">${dest}</span></span>
-        <small class="muted">${ts}</small>
+  agents.forEach(a => {
+    const el = document.createElement("div");
+    el.className = "agent-item";
+    el.innerHTML = `
+      <div class="agent-dot ${a.status}"></div>
+      <div class="agent-info">
+        <div class="agent-name">${a.name}</div>
+        <div class="agent-role">${a.role}${a.status !== "online" ? ` · ${a.status}` : ""}</div>
+        ${a.working_on ? `<div class="agent-working">▶ ${a.working_on}</div>` : ""}
       </div>
-      <p style="margin:0.25rem 0 0">${msg.content}</p>
-      <small class="muted" style="font-size:0.7rem">MSG-${(msg.id ?? "").slice(0, 8)} · ${msg.message_type}</small>
     `;
-    messagesEl.appendChild(card);
+    agentsList.appendChild(el);
   });
 }
 
-function renderAgents(agents, container) {
-  if (!container) return;
-  container.innerHTML = "";
-  agents.forEach((agent) => {
-    const dot = agent.status === "online" ? "#4ade80" : agent.status === "busy" ? "#f6b73c" : "#6b7280";
-    const ts = relativeTime(agent.lastSeen);
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div style="display:flex;align-items:center;gap:0.5rem">
-        <span style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0"></span>
-        <strong>${agent.name}</strong>
-        <span class="muted" style="font-size:0.75rem">${agent.role}</span>
-      </div>
-      ${agent.working_on ? `<p class="muted" style="margin:0.25rem 0 0;font-size:0.75rem">▶ ${agent.working_on}</p>` : ""}
-      <small class="muted">${ts}</small>
-    `;
-    container.appendChild(card);
+// ── Render: rooms (sidebar + tabs) ────────────────────────────────────────
+function renderRooms() {
+  roomCount.textContent = rooms.length;
+
+  roomsList.innerHTML = "";
+  roomTabs.innerHTML = "";
+
+  rooms.forEach(r => {
+    const item = document.createElement("div");
+    item.className = "room-item" + (r.id === activeRoomId ? " active" : "");
+    item.textContent = r.name;
+    item.onclick = () => switchRoom(r.id);
+    roomsList.appendChild(item);
+
+    const tab = document.createElement("div");
+    tab.className = "room-tab" + (r.id === activeRoomId ? " active" : "");
+    tab.textContent = `# ${r.name}`;
+    tab.dataset.roomId = r.id;
+    tab.onclick = () => switchRoom(r.id);
+    roomTabs.appendChild(tab);
   });
 }
 
-function renderTopology(graph) {
-  const width = 800;
-  const height = 480;
-
-  const svg = d3.select(topologyEl);
-  svg.selectAll("*").remove();
-
-  const nodes = graph.nodes.map((node) => ({ ...node }));
-  const links = graph.edges.map((edge) => ({ source: edge.from, target: edge.to }));
-
-  const simulation = d3
-    .forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id((d) => d.id).distance(120))
-    .force("charge", d3.forceManyBody().strength(-320))
-    .force("center", d3.forceCenter(width / 2, height / 2));
-
-  const link = svg
-    .append("g")
-    .attr("stroke", "#3c424f")
-    .attr("stroke-opacity", 0.6)
-    .selectAll("line")
-    .data(links)
-    .join("line")
-    .attr("stroke-width", 2);
-
-  const node = svg
-    .append("g")
-    .selectAll("circle")
-    .data(nodes)
-    .join("circle")
-    .attr("r", (d) => (d.type === "room" ? 18 : 12))
-    .attr("fill", (d) => (d.type === "room" ? "#f6b73c" : "#ff7a6b"))
-    .attr("stroke", "#0c0e12")
-    .attr("stroke-width", 2)
-    .call(
-      d3
-        .drag()
-        .on("start", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        })
-        .on("drag", (event, d) => {
-          d.fx = event.x;
-          d.fy = event.y;
-        })
-        .on("end", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
-        })
-    );
-
-  const label = svg
-    .append("g")
-    .selectAll("text")
-    .data(nodes)
-    .join("text")
-    .attr("fill", "#f7f3ea")
-    .attr("font-size", 12)
-    .attr("font-family", "Space Grotesk")
-    .text((d) => d.id);
-
-  simulation.on("tick", () => {
-    link
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
-
-    node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
-    label.attr("x", (d) => d.x + 14).attr("y", (d) => d.y + 4);
-  });
+function switchRoom(roomId) {
+  activeRoomId = roomId;
+  lastMsgId = null;
+  messages = [];
+  renderRooms();
+  renderMessages();
+  loadMessages();
 }
 
-// ── Agents panel ──────────────────────────────────────────────────────────
+// ── Render: messages ──────────────────────────────────────────────────────
+function renderMessages() {
+  messagesEl.innerHTML = "";
+  if (!messages.length) return;
 
-let agentsContainer = null;
+  let lastSender = null;
+  messages.forEach(m => {
+    const grouped = m.sender === lastSender;
+    lastSender = m.sender;
 
-function ensureAgentsPanel() {
-  if (agentsContainer) return;
-  const grid = document.querySelector(".grid");
-  if (!grid) return;
-  const panel = document.createElement("article");
-  panel.className = "panel";
-  panel.innerHTML = `
-    <div class="panel-header">
-      <h2>Agents</h2>
-      <button id="clear-token" title="Re-enter auth token" style="font-size:0.75rem;padding:0.25rem 0.5rem">🔑 Token</button>
-    </div>
-    <div id="agents-list"></div>
-  `;
-  grid.appendChild(panel);
-  agentsContainer = panel.querySelector("#agents-list");
-  panel.querySelector("#clear-token").addEventListener("click", async () => {
-    clearToken();
-    await ensureToken();
-    await refresh();
-  });
-}
+    const el = document.createElement("div");
+    el.className = "msg";
 
-// ── Refresh ───────────────────────────────────────────────────────────────
+    const dest = m.receiver ? `→ ${m.receiver}` : "";
+    const typeLabel = m.message_type !== "discussion"
+      ? `<div class="msg-type ${m.message_type}">${m.message_type.replace("_", " ")}</div>`
+      : "";
 
-async function refresh() {
-  try {
-    setStatus("Online");
-    const [agents, rooms, tools, topology] = await Promise.all([
-      fetchJSON("/api/agents"),
-      fetchJSON("/api/rooms"),
-      fetchJSON("/api/tools"),
-      fetchJSON("/api/topology"),
-    ]);
-
-    agentCount.textContent = agents.length;
-    roomCount.textContent = rooms.length;
-    renderRooms(rooms);
-    renderTools(tools);
-    renderTopology(topology);
-    ensureAgentsPanel();
-    renderAgents(agents, agentsContainer);
-
-    if (rooms[0]) {
-      await loadMessages(rooms[0].id);
+    if (grouped) {
+      el.innerHTML = `
+        <div class="msg-avatar" style="visibility:hidden">${initials(m.sender)}</div>
+        <div class="msg-body">
+          <div class="msg-content">${escHtml(m.content)}</div>
+          ${typeLabel}
+        </div>
+        <div class="msg-time">${relTime(m.timestamp)}</div>
+      `;
+    } else {
+      el.innerHTML = `
+        <div class="msg-avatar">${initials(m.sender)}</div>
+        <div class="msg-body">
+          <div class="msg-meta">
+            <span class="msg-sender">${escHtml(m.sender)}</span>
+            ${dest ? `<span class="msg-dest">${escHtml(dest)}</span>` : ""}
+            <span class="msg-time">${relTime(m.timestamp)}</span>
+          </div>
+          <div class="msg-content">${escHtml(m.content)}</div>
+          ${typeLabel}
+        </div>
+      `;
     }
-  } catch (error) {
-    setStatus("Offline");
-    console.error(error);
+    messagesEl.appendChild(el);
+  });
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ── Render: tasks ─────────────────────────────────────────────────────────
+function renderTasks() {
+  const todo       = tasks.filter(t => t.status === "todo");
+  const inprogress = tasks.filter(t => t.status === "in_progress");
+  const done       = tasks.filter(t => t.status === "done" || t.status === "blocked");
+
+  [
+    [todoEl,       todo],
+    [inprogressEl, inprogress],
+    [doneEl,       done],
+  ].forEach(([el, list]) => {
+    el.innerHTML = "";
+    if (!list.length) {
+      el.innerHTML = '<div class="task-empty">—</div>';
+      return;
+    }
+    list.forEach(t => {
+      const card = document.createElement("div");
+      card.className = "task-card";
+      card.innerHTML = `
+        <div class="task-card-title">${escHtml(t.title)}</div>
+        <div class="task-card-meta">${t.assignedTo ? `@${t.assignedTo}` : "unassigned"} · TASK-${t.id.slice(0,6)}</div>
+      `;
+      card.onclick = () => showTaskActions(t);
+      el.appendChild(card);
+    });
+  });
+}
+
+function showTaskActions(task) {
+  const next = task.status === "todo" ? "in_progress"
+    : task.status === "in_progress" ? "done"
+    : null;
+  if (!next) return;
+  const label = next === "in_progress" ? "Start" : "Mark done";
+  if (!confirm(`${label}: "${task.title}"?`)) return;
+  patch(`/api/tasks/${task.id}`, { status: next })
+    .then(() => loadAll())
+    .catch(err => alert(err.message));
+}
+
+// ── Connection status ─────────────────────────────────────────────────────
+function setOnline(ok) {
+  connDot.className = "status-dot " + (ok ? "online" : "offline");
+  connDot.title = ok ? "Connected" : "Offline";
+}
+
+// ── Data loaders ──────────────────────────────────────────────────────────
+async function loadMessages() {
+  if (!activeRoomId) return;
+  const threadId = `room-${activeRoomId}`;
+  const ctx = await api(`/api/threads/${threadId}`);
+  messages = ctx.messages ?? [];
+  if (messages.length) lastMsgId = messages[messages.length - 1].id;
+  renderMessages();
+}
+
+async function loadAll() {
+  try {
+    [agents, rooms, tasks] = await Promise.all([
+      api("/api/agents"),
+      api("/api/rooms"),
+      api("/api/tasks"),
+    ]);
+    setOnline(true);
+
+    if (!activeRoomId && rooms.length) activeRoomId = rooms[0].id;
+
+    renderAgents();
+    renderRooms();
+    renderTasks();
+    await loadMessages();
+  } catch {
+    setOnline(false);
   }
 }
 
-async function loadMessages(roomId) {
-  if (!roomId) return;
-  const threadId = `room-${roomId}`;
+// ── Poll for new messages every 5s ────────────────────────────────────────
+async function pollMessages() {
+  if (!activeRoomId) return;
   try {
-    const context = await fetchJSON(`/api/threads/${threadId}`);
-    renderMessages(context.messages || []);
-  } catch {
-    renderMessages([]);
+    const threadId = `room-${activeRoomId}`;
+    const ctx = await api(`/api/threads/${threadId}`);
+    const newMsgs = ctx.messages ?? [];
+    if (newMsgs.length !== messages.length) {
+      messages = newMsgs;
+      renderMessages();
+    }
+  } catch { /* silent */ }
+}
+
+// ── Send message ──────────────────────────────────────────────────────────
+async function sendMessage() {
+  const content = composeInput.value.trim();
+  const sender  = composeSender.value.trim() || "daniel";
+  if (!content || !activeRoomId) return;
+
+  composeInput.value = "";
+  composeInput.disabled = true;
+
+  try {
+    const msg = await post(`/api/rooms/${activeRoomId}/message`, { sender, content });
+    messages.push(msg);
+    renderMessages();
+    sessionStorage.setItem(SENDER_KEY, sender);
+  } catch (err) {
+    alert(err.message);
+    composeInput.value = content;
+  } finally {
+    composeInput.disabled = false;
+    composeInput.focus();
   }
 }
 
 // ── Event listeners ───────────────────────────────────────────────────────
+composeSend.addEventListener("click", sendMessage);
+composeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
 
-refreshBtn.addEventListener("click", refresh);
+refreshBtn.addEventListener("click", loadAll);
 
-createRoomBtn.addEventListener("click", async () => {
+tokenBtn.addEventListener("click", async () => {
+  clearToken();
+  await ensureToken();
+  loadAll();
+});
+
+newRoomBtn.addEventListener("click", async () => {
   const name = prompt("Room name?");
   if (!name) return;
   try {
-    await fetchJSON("/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-  } catch (err) {
-    alert(err.message);
-    return;
-  }
-  await refresh();
-});
-
-runToolBtn.addEventListener("click", async () => {
-  const tool = prompt("Tool name?", "deploy_service");
-  if (!tool) return;
-  try {
-    const result = await fetchJSON("/api/tools/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tool, args: { env: "staging" } }),
-    });
-    alert(JSON.stringify(result, null, 2));
+    await post("/api/rooms", { name });
+    await loadAll();
   } catch (err) {
     alert(err.message);
   }
 });
 
-roomSelect.addEventListener("change", async (event) => {
-  await loadMessages(event.target.value);
-});
-
-sendMessageBtn.addEventListener("click", async () => {
-  const roomId = roomSelect.value;
-  if (!roomId) {
-    alert("Select a room first");
-    return;
-  }
-  const content = prompt("Message?");
-  if (!content) return;
-  const sender = prompt("Your agent ID?", "cto_agent") || "cto_agent";
+newTaskBtn.addEventListener("click", async () => {
+  const title = prompt("Task title?");
+  if (!title) return;
+  const assignedTo = prompt("Assign to agent? (leave blank for unassigned)") || undefined;
   try {
-    await fetchJSON(`/api/rooms/${roomId}/message`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sender, content }),
-    });
-    await loadMessages(roomId);
+    await post("/api/tasks", { title, assignedTo });
+    await loadAll();
   } catch (err) {
     alert(err.message);
   }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-
 (async () => {
   await ensureToken();
-  await refresh();
-  // auto-refresh every 30s
-  setInterval(refresh, 30_000);
+
+  // restore sender from last session
+  const savedSender = sessionStorage.getItem(SENDER_KEY);
+  if (savedSender) composeSender.value = savedSender;
+
+  await loadAll();
+
+  // poll every 5s for messages, every 15s for agents+tasks
+  setInterval(pollMessages, 5_000);
+  setInterval(loadAll, 15_000);
 })();

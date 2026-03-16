@@ -3,81 +3,90 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AgentBridge Control Room</title>
+    <title>AgentBridge</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Space+Grotesk:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   </head>
   <body>
-    <main class="shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">AgentBridge • Paperclip Orchestration</p>
-          <h1>Control Room</h1>
-          <p class="subtitle">
-            A live topology of your AI organization with rooms, routing, and MCP tools.
-          </p>
+    <div id="auth-overlay" class="hidden">
+      <div class="auth-dialog">
+        <div class="auth-logo">⬡</div>
+        <h2>AgentBridge</h2>
+        <p>Enter your access token to connect.</p>
+        <input id="token-input" type="password" placeholder="Bearer token…" autocomplete="off" />
+        <button id="token-submit">Connect</button>
+      </div>
+    </div>
+
+    <div class="app">
+      <!-- Left sidebar: agents -->
+      <aside class="sidebar-left">
+        <div class="sidebar-header">
+          <div class="brand">
+            <span class="brand-icon">⬡</span>
+            <span class="brand-name">AgentBridge</span>
+          </div>
+          <div class="status-dot" id="connection-dot" title="Connecting…"></div>
         </div>
-        <div class="hero-card">
-          <div>
-            <span class="label">Status</span>
-            <strong id="status-pill">Booting…</strong>
-          </div>
-          <div>
-            <span class="label">Agents</span>
-            <strong id="agent-count">0</strong>
-          </div>
-          <div>
-            <span class="label">Rooms</span>
-            <strong id="room-count">0</strong>
-          </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">Agents <span id="agent-count" class="badge">0</span></div>
+          <div id="agents-list" class="agents-list"></div>
         </div>
-      </header>
 
-      <section class="grid">
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Topology</h2>
-            <button id="refresh">Refresh</button>
+        <div class="sidebar-section">
+          <div class="section-label">Rooms <span id="room-count" class="badge">0</span></div>
+          <div id="rooms-list" class="rooms-list"></div>
+          <button class="btn-ghost btn-sm" id="new-room-btn">+ New room</button>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="btn-ghost btn-sm" id="token-btn">🔑 Token</button>
+          <button class="btn-ghost btn-sm" id="refresh-btn">↻ Refresh</button>
+        </div>
+      </aside>
+
+      <!-- Center: activity feed -->
+      <main class="feed-area">
+        <div class="feed-header">
+          <div class="feed-room-tabs" id="room-tabs"></div>
+        </div>
+
+        <div class="feed-messages" id="messages"></div>
+
+        <div class="feed-compose">
+          <input id="compose-sender" class="compose-sender" placeholder="your-agent-id" />
+          <input id="compose-input" class="compose-message" placeholder="Send a message…" />
+          <button id="compose-send" class="btn-send">Send</button>
+        </div>
+      </main>
+
+      <!-- Right sidebar: tasks -->
+      <aside class="sidebar-right">
+        <div class="sidebar-section">
+          <div class="section-label">
+            Tasks
+            <button class="btn-ghost btn-xs" id="new-task-btn">+</button>
           </div>
-          <svg id="topology" viewBox="0 0 800 480"></svg>
-        </article>
-
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Rooms</h2>
-            <button id="create-room">New Room</button>
-          </div>
-          <div id="rooms"></div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Tools</h2>
-            <button id="run-tool">Execute</button>
-          </div>
-          <div id="tools"></div>
-        </article>
-      </section>
-
-      <section class="grid">
-        <article class="panel wide">
-          <div class="panel-header">
-            <h2>Room Feed</h2>
-            <div class="room-selector">
-              <select id="room-select"></select>
-              <button id="send-message">Send</button>
+          <div class="task-columns">
+            <div class="task-col">
+              <div class="task-col-header">Todo</div>
+              <div class="task-col-body" id="tasks-todo"></div>
+            </div>
+            <div class="task-col">
+              <div class="task-col-header active">In Progress</div>
+              <div class="task-col-body" id="tasks-inprogress"></div>
+            </div>
+            <div class="task-col">
+              <div class="task-col-header done">Done</div>
+              <div class="task-col-body" id="tasks-done"></div>
             </div>
           </div>
-          <div id="messages"></div>
-        </article>
-      </section>
-    </main>
+        </div>
+      </aside>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>
