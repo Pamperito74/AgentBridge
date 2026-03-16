@@ -1,4 +1,8 @@
 node_modules
 /dist
 /data/state.json
+/data/state.json.tmp
+/data/state.json.bak
 .env
+.next/
+.env.local

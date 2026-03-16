@@ -10,6 +10,11 @@ export const registerAgentSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const patchAgentStatusSchema = z.object({
+  status: agentStatusSchema.optional(),
+  working_on: z.string().optional(),
+});
+
 export const createRoomSchema = z.object({
   name: z.string().min(1),
   agents: z.array(z.string()).optional(),
@@ -27,6 +32,7 @@ export const roomMessageSchema = z.object({
   sender: z.string().min(1),
   content: z.string().min(1),
   thread_id: z.string().optional(),
+  receiver: z.string().optional(),
 });
 
 export const createTaskSchema = z.object({
@@ -35,6 +41,12 @@ export const createTaskSchema = z.object({
   assignedTo: z.string().optional(),
   roomId: z.string().optional(),
   status: z.enum(["todo", "in_progress", "done", "blocked"]).optional(),
+});
+
+export const patchTaskSchema = z.object({
+  status: z.enum(["todo", "in_progress", "done", "blocked"]).optional(),
+  assignedTo: z.string().optional(),
+  result: z.string().optional(),
 });
 
 export const planGoalSchema = z.object({
@@ -55,4 +67,22 @@ export const a2aMessageSchema = z.object({
   message_type: messageTypeSchema,
   content: z.string().min(1),
   timestamp: z.number().optional(),
+  correlationId: z.string().optional(),
+});
+
+export const requestMessageSchema = z.object({
+  sender: z.string().min(1),
+  recipient: z.string().min(1),
+  content: z.string().min(1),
+  timeout_ms: z.number().min(1000).max(120_000).optional(),
+});
+
+export const respondMessageSchema = z.object({
+  requestId: z.string().min(1),
+  sender: z.string().min(1),
+  content: z.string().min(1),
+});
+
+export const ackSchema = z.object({
+  messageId: z.string().min(1),
 });

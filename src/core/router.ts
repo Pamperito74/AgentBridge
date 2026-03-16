@@ -28,4 +28,13 @@ export class AgentRouter {
       }
     }
   }
+
+  /** Broadcast to all agents except the sender (echo suppression). */
+  broadcastExcept(excludeAgentId: string, message: A2AMessage) {
+    for (const [agentId, socket] of this.sockets.entries()) {
+      if (agentId !== excludeAgentId && socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify(message));
+      }
+    }
+  }
 }

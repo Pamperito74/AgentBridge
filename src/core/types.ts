@@ -5,6 +5,7 @@ export interface Agent {
   name: string;
   role: string;
   status: AgentStatus;
+  working_on?: string;
   meta?: Record<string, unknown>;
   lastSeen: number;
 }
@@ -25,6 +26,7 @@ export type MessageType =
   | "tool_call";
 
 export interface A2AMessage {
+  id: string;
   protocol: "A2A/1.0";
   sender: string;
   receiver?: string;
@@ -33,6 +35,8 @@ export interface A2AMessage {
   message_type: MessageType;
   content: string;
   timestamp: number;
+  read?: boolean;
+  correlationId?: string;
 }
 
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
@@ -44,8 +48,20 @@ export interface Task {
   status: TaskStatus;
   assignedTo?: string;
   roomId?: string;
+  result?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface PendingRequest {
+  requestId: string;
+  sender: string;
+  recipient: string;
+  content: string;
+  createdAt: number;
+  timeoutMs: number;
+  response?: A2AMessage;
+  resolved: boolean;
 }
 
 export interface TopologyNode {

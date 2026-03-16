@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { nanoid } from "nanoid";
-import type { Agent, A2AMessage, Room, Task, TopologyGraph } from "./types.js";
+import type { Agent, A2AMessage, Room, Task, TopologyGraph, PendingRequest } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_PATH = path.resolve(__dirname, "../../data/state.json");
@@ -19,6 +19,10 @@ export class AgentBridgeStore {
   private rooms = new Map<string, Room>();
   private tasks = new Map<string, Task>();
   private threads = new Map<string, A2AMessage[]>();
+  /** inbox: agentId → messages where receiver === agentId */
+  private inbox = new Map<string, A2AMessage[]>();
+  /** pending requests awaiting a correlated response */
+  private pendingRequests = new Map<string, PendingRequest>();
   private persistTimer: NodeJS.Timeout | null = null;
 
   async load(): Promise<void> {
@@ -37,6 +41,14 @@ export class AgentBridgeStore {
       parsed.tasks?.forEach((task) => this.tasks.set(task.id, task));
       Object.entries(parsed.threads ?? {}).forEach(([id, messages]) => {
         this.threads.set(id, messages);
+        // rebuild inbox index from persisted messages
+        messages.forEach((msg) => {
+          if (msg.receiver) {
+            const agentInbox = this.inbox.get(msg.receiver) ?? [];
+            agentInbox.push(msg);
+            this.inbox.set(msg.receiver, agentInbox);
+          }
+        });
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -70,6 +82,10 @@ export class AgentBridgeStore {
     return [...this.agents.values()];
   }
 
+  getAgent(id: string): Agent | undefined {
+    return this.agents.get(id);
+  }
+
   upsertAgent(input: Omit<Agent, "lastSeen"> & { lastSeen?: number }): Agent {
     const now = Date.now();
     const agent: Agent = {
@@ -81,11 +97,14 @@ export class AgentBridgeStore {
     return agent;
   }
 
-  updateAgentStatus(id: string, status: Agent["status"]) {
+  updateAgentStatus(id: string, status: Agent["status"], working_on?: string) {
     const agent = this.agents.get(id);
     if (!agent) return;
     agent.status = status;
     agent.lastSeen = Date.now();
+    if (working_on !== undefined) {
+      agent.working_on = working_on;
+    }
     this.schedulePersist();
   }
 
@@ -97,9 +116,14 @@ export class AgentBridgeStore {
     return this.rooms.get(id);
   }
 
-  createRoom(name: string, agents: string[] = []): Room {
+  /** Returns undefined if room already exists (caller should 409). */
+  createRoom(name: string, agents: string[] = []): Room | undefined {
+    const id = name.toLowerCase().replace(/\s+/g, "-");
+    if (this.rooms.has(id)) {
+      return undefined;
+    }
     const room: Room = {
-      id: name.toLowerCase().replace(/\s+/g, "-"),
+      id,
       name,
       agents: [...new Set(agents)],
       activeTasks: 0,
@@ -120,16 +144,63 @@ export class AgentBridgeStore {
     return room;
   }
 
-  addMessage(message: A2AMessage): A2AMessage {
-    const thread = this.threads.get(message.thread_id) ?? [];
-    thread.push(message);
-    this.threads.set(message.thread_id, thread);
+  addMessage(message: Omit<A2AMessage, "id"> & { id?: string }): A2AMessage {
+    const msg: A2AMessage = {
+      ...message,
+      id: message.id ?? nanoid(),
+    };
+    const thread = this.threads.get(msg.thread_id) ?? [];
+    thread.push(msg);
+    this.threads.set(msg.thread_id, thread);
+
+    // maintain inbox index for targeted messages
+    if (msg.receiver) {
+      const agentInbox = this.inbox.get(msg.receiver) ?? [];
+      agentInbox.push(msg);
+      this.inbox.set(msg.receiver, agentInbox);
+    }
+
     this.schedulePersist();
-    return message;
+    return msg;
   }
 
   getThread(threadId: string): A2AMessage[] {
     return this.threads.get(threadId) ?? [];
+  }
+
+  /** Returns all messages across all threads, optionally since a given message id, up to limit. */
+  getMessages(opts: { sinceId?: string; limit?: number } = {}): A2AMessage[] {
+    const all: A2AMessage[] = [];
+    for (const msgs of this.threads.values()) {
+      all.push(...msgs);
+    }
+    all.sort((a, b) => a.timestamp - b.timestamp);
+
+    if (opts.sinceId) {
+      const idx = all.findIndex((m) => m.id === opts.sinceId);
+      if (idx !== -1) {
+        all.splice(0, idx + 1);
+      }
+    }
+
+    if (opts.limit) {
+      return all.slice(0, opts.limit);
+    }
+    return all;
+  }
+
+  getInbox(agentId: string): A2AMessage[] {
+    return this.inbox.get(agentId) ?? [];
+  }
+
+  markInboxRead(agentId: string, messageId: string): boolean {
+    const msgs = this.inbox.get(agentId);
+    if (!msgs) return false;
+    const msg = msgs.find((m) => m.id === messageId);
+    if (!msg) return false;
+    msg.read = true;
+    this.schedulePersist();
+    return true;
   }
 
   createTask(input: Omit<Task, "id" | "createdAt" | "updatedAt">): Task {
@@ -156,17 +227,60 @@ export class AgentBridgeStore {
     return tasks.filter((task) => task.roomId === roomId);
   }
 
+  getTask(id: string): Task | undefined {
+    return this.tasks.get(id);
+  }
+
   updateTask(id: string, patch: Partial<Task>): Task | undefined {
     const task = this.tasks.get(id);
     if (!task) return undefined;
+
+    const prevStatus = task.status;
     const updated: Task = {
       ...task,
       ...patch,
       updatedAt: Date.now(),
     };
     this.tasks.set(id, updated);
+
+    // decrement room activeTasks when task transitions to a terminal state
+    const terminal = new Set<Task["status"]>(["done", "blocked"]);
+    const wasActive = !terminal.has(prevStatus);
+    const isNowTerminal = terminal.has(updated.status);
+    if (wasActive && isNowTerminal && updated.roomId) {
+      const room = this.rooms.get(updated.roomId);
+      if (room && room.activeTasks > 0) {
+        room.activeTasks -= 1;
+      }
+    }
+
     this.schedulePersist();
     return updated;
+  }
+
+  // ── Request / Response correlation ──────────────────────────────────────
+
+  createRequest(input: Omit<PendingRequest, "requestId" | "createdAt" | "resolved">): PendingRequest {
+    const req: PendingRequest = {
+      ...input,
+      requestId: nanoid(),
+      createdAt: Date.now(),
+      resolved: false,
+    };
+    this.pendingRequests.set(req.requestId, req);
+    return req;
+  }
+
+  getRequest(requestId: string): PendingRequest | undefined {
+    return this.pendingRequests.get(requestId);
+  }
+
+  resolveRequest(requestId: string, response: A2AMessage): PendingRequest | undefined {
+    const req = this.pendingRequests.get(requestId);
+    if (!req || req.resolved) return undefined;
+    req.response = response;
+    req.resolved = true;
+    return req;
   }
 
   getContext(threadId: string) {
@@ -202,3 +316,6 @@ export class AgentBridgeStore {
     return { nodes, edges };
   }
 }
+
+// Singleton — shared between REST API and MCP server
+export const store = new AgentBridgeStore();
