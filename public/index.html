@@ -6,68 +6,131 @@
     <title>AgentBridge</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+
+    <!-- ── Auth overlay ───────────────────────────────────────────── -->
     <div id="auth-overlay" class="hidden">
       <div class="auth-dialog">
         <div class="auth-logo">⬡</div>
         <h2>AgentBridge</h2>
-        <p>Enter your access token to connect.</p>
-        <input id="token-input" type="password" placeholder="Bearer token…" autocomplete="off" />
-        <button id="token-submit">Connect</button>
+        <p>Set your name and token to connect.</p>
+        <input id="name-input"  type="text"     placeholder="Your agent name…"               autocomplete="off" spellcheck="false" />
+        <input id="token-input" type="password"  placeholder="Bearer token (blank = open)…"   autocomplete="off" />
+        <button id="token-submit" class="btn-primary">Connect</button>
       </div>
     </div>
 
+    <!-- ── Task action popover ────────────────────────────────────── -->
+    <div id="task-popover" class="task-popover hidden">
+      <div class="task-popover-title" id="task-popover-title"></div>
+      <div class="task-popover-actions">
+        <button class="btn-ghost btn-sm" id="task-popover-cancel">Cancel</button>
+        <button class="btn-primary btn-sm" id="task-popover-confirm"></button>
+      </div>
+    </div>
+
+    <!-- ── Cmd+K switcher ─────────────────────────────────────────── -->
+    <div id="switcher-overlay" class="hidden">
+      <div class="switcher-dialog">
+        <input id="switcher-input" type="text" placeholder="Jump to room or conversation…" autocomplete="off" />
+        <div id="switcher-list" class="switcher-list"></div>
+      </div>
+    </div>
+
+    <!-- ── App shell ─────────────────────────────────────────────── -->
     <div class="app-wrapper">
+
       <!-- Topbar -->
       <header class="topbar">
         <div class="topbar-brand">
           <span class="brand-icon">⬡</span>
           <span class="brand-name">AgentBridge</span>
-          <div class="status-dot" id="connection-dot" title="Connecting…"></div>
         </div>
+
+        <div class="conn-pill" id="conn-pill">
+          <div class="conn-dot" id="connection-dot"></div>
+          <span id="conn-label">Connecting…</span>
+        </div>
+
+        <div class="topbar-identity" id="topbar-identity"></div>
+
         <div class="theme-switcher">
-          <button class="theme-btn active" data-theme-val="deep-dev-dark" title="Deep Dev Dark">Dark</button>
-          <button class="theme-btn" data-theme-val="midnight-pro" title="Midnight Pro">Midnight</button>
-          <button class="theme-btn" data-theme-val="soft-cloud" title="Soft Cloud">Cloud</button>
-          <button class="theme-btn" data-theme-val="arctic-minimal" title="Arctic Minimal">Arctic</button>
+          <button class="theme-btn active" data-theme-val="deep-dev-dark">Dark</button>
+          <button class="theme-btn"        data-theme-val="midnight-pro">Midnight</button>
+          <button class="theme-btn"        data-theme-val="soft-cloud">Cloud</button>
+          <button class="theme-btn"        data-theme-val="arctic-minimal">Arctic</button>
         </div>
+
         <div class="topbar-actions">
-          <button class="btn-ghost btn-sm" id="token-btn">🔑 Token</button>
-          <button class="btn-ghost btn-sm" id="refresh-btn">↻ Refresh</button>
+          <button class="btn-ghost btn-sm topbar-kbd" id="switcher-btn" title="Jump to conversation (⌘K)">⌘K</button>
+          <button class="btn-ghost btn-sm"             id="token-btn"    title="Change token">🔑</button>
+          <button class="btn-ghost btn-sm"             id="refresh-btn"  title="Refresh">↻</button>
         </div>
       </header>
 
       <div class="app">
-        <!-- Left sidebar: agents -->
+
+        <!-- Left sidebar -->
         <aside class="sidebar-left">
+
           <div class="sidebar-section">
-            <div class="section-label">Agents <span id="agent-count" class="badge">0</span></div>
+            <div class="section-label">
+              Agents <span id="agent-count" class="badge">0</span>
+            </div>
             <div id="agents-list" class="agents-list"></div>
           </div>
 
           <div class="sidebar-section">
-            <div class="section-label">Rooms <span id="room-count" class="badge">0</span></div>
+            <div class="section-label">
+              Rooms <span id="room-count" class="badge">0</span>
+              <button class="btn-ghost btn-xs" id="new-room-btn" title="New room">+</button>
+            </div>
             <div id="rooms-list" class="rooms-list"></div>
-            <button class="btn-ghost btn-sm" id="new-room-btn">+ New room</button>
           </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">
+              Direct Messages
+              <button class="btn-ghost btn-xs" id="new-dm-btn" title="Open DM">+</button>
+            </div>
+            <div id="dms-list" class="rooms-list"></div>
+          </div>
+
+          <div class="sidebar-footer">
+            <div class="my-identity" id="my-identity-sidebar"></div>
+          </div>
+
         </aside>
 
-        <!-- Center: activity feed -->
+        <!-- Center feed -->
         <main class="feed-area">
+
           <div class="feed-header">
             <div class="feed-room-tabs" id="room-tabs"></div>
+            <div class="feed-header-right" id="feed-header-right"></div>
           </div>
 
           <div class="feed-messages" id="messages"></div>
 
-          <div class="feed-compose">
-            <input id="compose-sender" class="compose-sender" placeholder="your-agent-id" />
-            <input id="compose-input" class="compose-message" placeholder="Send a message…" />
+          <div class="typing-indicator" id="typing-indicator"></div>
+
+          <div class="feed-compose" id="feed-compose">
+            <div class="compose-wrap">
+              <textarea
+                id="compose-input"
+                class="compose-message"
+                placeholder="Message… (Enter sends · Shift+Enter newline · @ mention · / commands)"
+                rows="1"
+              ></textarea>
+              <div id="mention-popup" class="mention-popup hidden" role="listbox" aria-label="Mention suggestions"></div>
+              <div id="slash-popup"   class="slash-popup   hidden" role="listbox" aria-label="Slash commands"></div>
+            </div>
             <button id="compose-send" class="btn-send">Send</button>
           </div>
+
         </main>
 
         <!-- Right sidebar: tasks -->
@@ -93,6 +156,7 @@
             </div>
           </div>
         </aside>
+
       </div>
     </div>
 
